@@ -1,0 +1,101 @@
+# SPDX-FileCopyrightText: 2026 GSI Helmholtz Centre for Heavy Ion Research GmbH <http://www.gsi.de>
+# SPDX-License-Identifier: Apache-2.0
+
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  # Both ends of the supported range: the go line in go.mod, which is what a
+  # program importing the module may build with, and the release line
+  # mise.toml names (doc/decisions.md, decision 2).
+  test:
+    name: Test (Go ${{ matrix.line }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        line: [floor, current]
+    steps:
+      - uses: actions/checkout@v7
+      - uses: ./.github/actions/setup-go
+        with:
+          line: ${{ matrix.line }}
+
+      - name: Vet
+        run: go vet ./...
+
+      - name: Test under the race detector
+        run: go test -race ./...
+
+  coverage:
+    name: Coverage
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: ./.github/actions/setup-go
+
+      - name: Measure coverage
+        run: go test -race -coverprofile=coverage.out -covermode=atomic ./...
+
+      # Every file at 100% (.testcoverage.yml).
+      - uses: vladopajic/go-test-coverage@v2
+        with:
+          config: .testcoverage.yml
+
+  lint:
+    name: Lint
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: ./.github/actions/setup-go
+
+      # The module requires nothing (doc/decisions.md, decision 3), and
+      # go.mod is as go mod tidy leaves it.
+      - name: Check that the module is tidy and requires nothing
+        run: |
+          set -euo pipefail
+          make tidy
+          git diff --exit-code -- go.mod
+          test ! -e go.sum
+
+      - uses: golangci/golangci-lint-action@v9
+        with:
+          version: latest
+
+  docs:
+    name: Markdown
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - run: make lint-docs
+
+  reuse:
+    name: REUSE
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      # Every file states its copyright holder and licence
+      # (doc/decisions.md, decision 1).
+      - uses: fsfe/reuse-action@v6
+
+  vulnerabilities:
+    name: Vulnerabilities
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: ./.github/actions/setup-go
+      - run: go run golang.org/x/vuln/cmd/govulncheck@latest ./...
+
