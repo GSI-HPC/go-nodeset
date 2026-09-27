@@ -1,0 +1,41 @@
+# SPDX-FileCopyrightText: 2026 GSI Helmholtz Centre for Heavy Ion Research GmbH <http://www.gsi.de>
+# SPDX-License-Identifier: Apache-2.0
+
+name: Set up Go
+description: >-
+  Go at the newest patch of either end of the supported range: the release
+  line mise.toml names, which contributors use, or the oldest one, the go
+  line in go.mod.
+
+inputs:
+  line:
+    description: current (mise.toml) or floor (go.mod).
+    default: current
+
+runs:
+  using: composite
+  steps:
+    - id: version
+      shell: bash
+      env:
+        LINE: ${{ inputs.line }}
+      run: |
+        set -euo pipefail
+        case "$LINE" in
+          current) go=$(sed -n 's/^go = "\([0-9]*\.[0-9]*\)"$/\1/p' mise.toml) ;;
+          floor) go=$(sed -n 's/^go \([0-9]*\.[0-9]*\)\(\.[0-9]*\)\{0,1\}$/\1/p' go.mod) ;;
+          *) echo "::error::line is current or floor, not '$LINE'"; exit 1 ;;
+        esac
+        # Without a version setup-go would quietly use the runner's own Go.
+        if [ -z "$go" ]; then
+          echo "::error::found no Go release line for '$LINE'"
+          exit 1
+        fi
+        echo "go=$go" >> "$GITHUB_OUTPUT"
+
+    # The newest patch of the line, because Go ships the standard library's
+    # security fixes as patch releases.
+    - uses: actions/setup-go@v7
+      with:
+        go-version: ${{ steps.version.outputs.go }}
+        check-latest: true
