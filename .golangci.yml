@@ -1,0 +1,51 @@
+# SPDX-FileCopyrightText: 2026 GSI Helmholtz Centre for Heavy Ion Research GmbH <http://www.gsi.de>
+# SPDX-License-Identifier: Apache-2.0
+#
+# The GSI-HPC baseline of linters for Go modules. golangci-lint v2 cannot
+# extend a remote configuration, so each module carries its own copy.
+
+version: "2"
+
+linters:
+  enable:
+    - copyloopvar
+    - depguard
+    - errcheck
+    - errorlint
+    - govet
+    - ineffassign
+    - misspell
+    - nilerr
+    - revive
+    - staticcheck
+    - unconvert
+    - unused
+    - usestdlibvars
+
+  settings:
+    depguard:
+      rules:
+        # The module requires nothing, in its tests either, so that every
+        # program can take it without taking anything else
+        # (doc/decisions.md, decision 3).
+        standard-library-only:
+          list-mode: strict
+          allow:
+            - $gostd
+            - github.com/GSI-HPC/go-nodeset
+    errcheck:
+      # A deliberate discard is written as _ = f(), which reads as a decision
+      # rather than an oversight.
+      check-blank: false
+
+  exclusions:
+    rules:
+      # A test may ignore an error where the failure it is provoking is the
+      # point of the test.
+      - path: _test\.go
+        linters: [errcheck]
+
+formatters:
+  enable:
+    - gofmt
+    - goimports

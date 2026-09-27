@@ -1,0 +1,15 @@
+# SPDX-FileCopyrightText: 2026 GSI Helmholtz Centre for Heavy Ion Research GmbH <http://www.gsi.de>
+# SPDX-License-Identifier: Apache-2.0
+#
+# The tools needed to work on this module, so that everyone tests and lints it
+# with the same ones. Install them with "mise install".
+
+[tools]
+# The newest Go release line, which CI's current jobs use through
+# .github/actions/setup-go; mise takes its newest patch, as they do. The go
+# line in go.mod is the oldest release the code compiles with, which CI tests
+# as well (doc/decisions.md, decision 2).
+go = "1.27"
+
+# The major version .golangci.yml is written against.
+golangci-lint = "2"
