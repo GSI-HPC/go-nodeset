@@ -153,14 +153,15 @@ unpublish it.
 - Nothing in the tree names a version: no `VERSION` file, no constant, no
   `CHANGELOG.md`, and `CITATION.cff` has no `version`.
 - The maintainer releases by pushing an annotated tag `vX.Y.Z`, signed with
-  an SSH key. The body of the tag message, everything after its first line,
-  is the release notes.
+  an SSH or an OpenPGP key. The body of the tag message, everything after
+  its first line, is the release notes.
 - The Release workflow refuses a tag that no key in the
-  `RELEASE_ALLOWED_SIGNERS` repository variable signed under the name it
-  was pushed as, and a tag the go command would not accept as a version of
-  this module. It tests the tagged commit on both Go lines, publishes the
-  GitHub release with the tag body as its notes, and fetches the version
-  through proxy.golang.org, so that pkg.go.dev lists it.
+  `RELEASE_ALLOWED_SIGNERS` (SSH) or `RELEASE_ALLOWED_PGP_KEYS` (OpenPGP)
+  repository variable signed under the name it was pushed as, and a tag the
+  go command would not accept as a version of this module. It tests the
+  tagged commit on both Go lines, publishes the GitHub release with the tag
+  body as its notes, and fetches the version through proxy.golang.org, so
+  that pkg.go.dev lists it.
 - A tag is never moved or deleted. A broken release is withdrawn with a
   `retract` directive in `go.mod`, which ships in the next release.
 - The module stays at v0 while its API settles, and a v0 minor release may
@@ -176,5 +177,9 @@ verification.
   Its failure is the alarm, and retraction is the remedy; a tag ruleset that
   lets only the maintainers create `v*` tags is what keeps others from
   pushing one.
-- The signing key becomes part of the release process. OpenPGP signatures
-  are refused.
+- The signing key becomes part of the release process. Two formats are
+  accepted, so that a maintainer signs with the key they already use; the
+  verification and its tests cover both.
+- An OpenPGP key is trusted as the variable holds it: an expired key stops
+  verifying on its own, a revoked one only once the variable holds its
+  revocation.
