@@ -1,0 +1,34 @@
+# SPDX-FileCopyrightText: 2026 GSI Helmholtz Centre for Heavy Ion Research GmbH <http://www.gsi.de>
+# SPDX-License-Identifier: Apache-2.0
+#
+# How to cite this module (https://citation-file-format.github.io). It names
+# no version: a version exists only in a signed tag
+# (doc/decisions.md, decision 4).
+
+cff-version: 1.2.0
+message: If you use this software, please cite it as below.
+type: software
+title: "go-nodeset: ClusterShell node sets for Go"
+abstract: >-
+  A Go library that parses, folds and expands ClusterShell style node sets:
+  ranges and steps, several numeric dimensions, set operators, groups
+  through a resolver, and host lists that Slurm accepts.
+authors:
+  - family-names: Klein
+    given-names: Dennis
+    orcid: https://orcid.org/0000-0003-3787-1910
+    affiliation: GSI Helmholtz Centre for Heavy Ion Research GmbH
+  - name: GSI Helmholtz Centre for Heavy Ion Research GmbH
+    website: https://www.gsi.de
+    city: Darmstadt
+    country: DE
+repository-code: https://github.com/GSI-HPC/go-nodeset
+url: https://pkg.go.dev/github.com/GSI-HPC/go-nodeset
+license: Apache-2.0
+keywords:
+  - HPC
+  - Slurm
+  - ClusterShell
+  - node set
+  - hostlist
+  - Go
