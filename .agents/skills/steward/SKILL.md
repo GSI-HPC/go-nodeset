@@ -24,7 +24,7 @@ description: Drive a go-nodeset pull request to a mergeable state. Covers the lo
 5. `make reuse` passes (`pip install reuse`), and `make lint-docs` passes if
    Markdown changed.
 6. If `.github/` changed: `actionlint`, `shellcheck .github/scripts/*.sh` and
-   `make test-release`.
+   `make test-release`, which needs `ssh-keygen` and `gpg`.
 7. Re-read the diff: both SPDX lines on new files, doc comments on exported
    identifiers, tests for new behaviour, a section in `doc/decisions.md`
    for a decision, `README.md`, `AGENTS.md` and the documents in `doc/` in
