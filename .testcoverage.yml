@@ -1,0 +1,12 @@
+# SPDX-FileCopyrightText: 2026 GSI Helmholtz Centre for Heavy Ion Research GmbH <http://www.gsi.de>
+# SPDX-License-Identifier: Apache-2.0
+#
+# go-test-coverage (https://github.com/vladopajic/go-test-coverage): every
+# statement is covered. A branch no test can reach is deleted, not excluded.
+
+profile: coverage.out
+
+threshold:
+  file: 100
+  package: 100
+  total: 100

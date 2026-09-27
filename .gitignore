@@ -1,0 +1,27 @@
+# SPDX-FileCopyrightText: 2026 GSI Helmholtz Centre for Heavy Ion Research GmbH <http://www.gsi.de>
+# SPDX-License-Identifier: Apache-2.0
+
+# Personal instructions for coding agents
+/AGENTS.local.md
+/CLAUDE.local.md
+
+# Agent state; the shared skills live in .agents/skills, and .claude/skills
+# links to them
+/.claude/*
+!/.claude/skills
+
+# Personal mise overrides
+/mise.local.toml
+
+# A workspace for developing against local checkouts of a consumer is never
+# committed, and neither is a replace directive
+go.work
+go.work.sum
+
+# Test and coverage output
+*.out
+*.test
+coverage.html
+
+# Markdown linting
+node_modules/

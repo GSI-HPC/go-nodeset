@@ -1,0 +1,18 @@
+# SPDX-FileCopyrightText: 2026 GSI Helmholtz Centre for Heavy Ion Research GmbH <http://www.gsi.de>
+# SPDX-License-Identifier: Apache-2.0
+#
+# markdownlint (make lint-docs). Each rule turned off or relaxed below says
+# why.
+
+default: true
+MD010: # hard tabs, except in Go code, which gofmt indents with tabs
+  ignore_code_languages: [go]
+MD013: false # line length: prose is wrapped by hand, tables and links are not
+MD014: false # "$ " marks the commands in console blocks, apart from their output
+MD024: # Context, Decision and Costs repeat, each under its own decision
+  siblings_only: true
+MD033: false # inline HTML
+MD034: false # bare URLs
+MD040: false # fenced code without a language
+MD041: false # the first line is the SPDX comment, not a heading
+MD060: false # table column style
