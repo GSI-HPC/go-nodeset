@@ -1,0 +1,142 @@
+# SPDX-FileCopyrightText: 2026 GSI Helmholtz Centre for Heavy Ion Research GmbH <http://www.gsi.de>
+# SPDX-License-Identifier: Apache-2.0
+#
+# A release of a Go module is its tag: the module proxy serves whatever tag is
+# pushed. This workflow refuses a tag that is not a signed statement by a
+# listed signer, and then publishes the GitHub release, its notes the body of
+# the tag message (doc/decisions.md, decision 4, and doc/release.md).
+
+name: Release
+
+on:
+  push:
+    tags: ['v*']
+
+# Read only, unless a job says otherwise: only the release job writes.
+permissions:
+  contents: read
+
+jobs:
+  verify-tag:
+    name: Verify the tag is signed
+    runs-on: ubuntu-latest
+    outputs:
+      object: ${{ steps.verify.outputs.object }}
+      commit: ${{ steps.verify.outputs.commit }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      # The signer list is a repository variable, which only an administrator
+      # can change, and never a file in the checkout: the tagged commit would
+      # otherwise name its own signers. Without it no release is published.
+      - name: Refuse a tag not signed by a listed signer
+        id: verify
+        env:
+          ALLOWED_SIGNERS: ${{ vars.RELEASE_ALLOWED_SIGNERS }}
+        run: .github/scripts/verify-release-tag.sh
+
+      # The go command accepts only a semantic version, and from v2 on only
+      # in a module path that ends in the major version.
+      - name: Refuse a version the go command would not accept
+        env:
+          TAG: ${{ github.ref_name }}
+        run: |
+          set -euo pipefail
+          semver='^v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)(-[0-9A-Za-z-]+(\.[0-9A-Za-z-]+)*)?$'
+          if ! [[ "$TAG" =~ $semver ]]; then
+            echo "::error::$TAG is not a semantic version such as v1.2.3 or v1.2.3-rc.1"
+            exit 1
+          fi
+          major="${BASH_REMATCH[1]}"
+          module="$(sed -n 's/^module //p' go.mod)"
+          suffix="$(sed -n 's#^.*/v\([0-9][0-9]*\)$#\1#p' <<< "$module")"
+          if { [ "$major" -ge 2 ] && [ "$suffix" != "$major" ]; } || { [ "$major" -lt 2 ] && [ -n "$suffix" ]; }; then
+            echo "::error::$TAG does not match the module path $module"
+            exit 1
+          fi
+
+  test:
+    name: Test (Go ${{ matrix.line }})
+    needs: verify-tag
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        line: [floor, current]
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ needs.verify-tag.outputs.commit }}
+          persist-credentials: false
+      - uses: ./.github/actions/setup-go
+        with:
+          line: ${{ matrix.line }}
+      - run: go vet ./...
+      - run: go test -race ./...
+
+  release:
+    name: Publish
+    needs: [verify-tag, test]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    # Protection rules on this environment, such as a rule that only v* tags
+    # deploy, hold the release until they are met.
+    environment: release
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      # The tag may have moved since it was verified; what is published is the
+      # tag object that was verified and the commit it names, or nothing.
+      - name: Refuse a tag that moved since it was verified
+        env:
+          TAG: ${{ github.ref_name }}
+          OBJECT: ${{ needs.verify-tag.outputs.object }}
+          COMMIT: ${{ needs.verify-tag.outputs.commit }}
+        run: |
+          set -euo pipefail
+          if [ -z "$OBJECT" ] || [ "$(git rev-parse --verify "refs/tags/$TAG")" != "$OBJECT" ]; then
+            echo "::error::$TAG no longer points at the verified tag object $OBJECT"
+            exit 1
+          fi
+          if [ "$(git rev-parse --verify HEAD)" != "$COMMIT" ]; then
+            echo "::error::the checkout is not the verified commit $COMMIT"
+            exit 1
+          fi
+
+      # The body of the tag message, everything after its first line, is the
+      # release notes; %(contents:body) stops before the signature. A tag
+      # without a body gets GitHub's list of the pull requests instead.
+      - name: Publish the GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ github.ref_name }}
+        run: |
+          set -euo pipefail
+          git for-each-ref --format='%(contents:body)' "refs/tags/$TAG" > "$RUNNER_TEMP/notes.md"
+          args=(--verify-tag --title "$TAG")
+          if grep -q '[^[:space:]]' "$RUNNER_TEMP/notes.md"; then
+            args+=(--notes-file "$RUNNER_TEMP/notes.md")
+          else
+            args+=(--generate-notes)
+          fi
+          if [[ "$TAG" == *-* ]]; then
+            args+=(--prerelease)
+          fi
+          gh release create "$TAG" "${args[@]}"
+
+      - uses: ./.github/actions/setup-go
+
+      # pkg.go.dev lists a version once the module proxy has fetched it, so
+      # the release is fetched once, from outside the module.
+      - name: Fetch the release through the Go module proxy
+        working-directory: ${{ runner.temp }}
+        env:
+          TAG: ${{ github.ref_name }}
+          MODULE_FILE: ${{ github.workspace }}/go.mod
+        run: go list -m "$(sed -n 's/^module //p' "$MODULE_FILE")@$TAG"

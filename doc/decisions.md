@@ -12,6 +12,7 @@ edited: a later one supersedes it, and the earlier one's status names it.
 | [1](#1-apache-20-and-gsi-holds-the-copyright) | Apache-2.0, and GSI holds the copyright | accepted |
 | [2](#2-the-go-line-is-the-oldest-go-release-still-supported) | The go line is the oldest Go release still supported | accepted |
 | [3](#3-the-module-requires-nothing) | The module requires nothing | accepted |
+| [4](#4-a-release-is-a-signed-tag) | A release is a signed tag | accepted |
 
 ## 1. Apache-2.0, and GSI holds the copyright
 
@@ -135,3 +136,45 @@ use the standard library alone too: no testify, no go-cmp.
 
 Whatever the standard library lacks is written here, test helpers
 included, or done without.
+
+## 4. A release is a signed tag
+
+Status: accepted
+
+### Context
+
+A version of a Go module is a tag. The module proxy serves any tag of a
+public repository as soon as someone asks for it, and the checksum database
+records its content for good: deleting or moving the tag afterwards does not
+unpublish it.
+
+### Decision
+
+- Nothing in the tree names a version: no `VERSION` file, no constant, no
+  `CHANGELOG.md`, and `CITATION.cff` has no `version`.
+- The maintainer releases by pushing an annotated tag `vX.Y.Z`, signed with
+  an SSH key. The body of the tag message, everything after its first line,
+  is the release notes.
+- The Release workflow refuses a tag that no key in the
+  `RELEASE_ALLOWED_SIGNERS` repository variable signed under the name it
+  was pushed as, and a tag the go command would not accept as a version of
+  this module. It tests the tagged commit on both Go lines, publishes the
+  GitHub release with the tag body as its notes, and fetches the version
+  through proxy.golang.org, so that pkg.go.dev lists it.
+- A tag is never moved or deleted. A broken release is withdrawn with a
+  `retract` directive in `go.mod`, which ships in the next release.
+- The module stays at v0 while its API settles, and a v0 minor release may
+  break it; the release notes say how. v1.0.0 follows once the API has held
+  still through releases of the programs that import the module.
+
+`doc/release.md` says how to cut a release and how to set up the
+verification.
+
+### Costs
+
+- The workflow cannot stop the module proxy from serving a tag it refused.
+  Its failure is the alarm, and retraction is the remedy; a tag ruleset that
+  lets only the maintainers create `v*` tags is what keeps others from
+  pushing one.
+- The signing key becomes part of the release process. OpenPGP signatures
+  are refused.
