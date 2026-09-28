@@ -125,17 +125,19 @@ ClusterShell 1.10.1 was run over the corpus in
 `testdata/clustershell.txt` next to the package, and a test, which
 [testing.md](testing.md#what-is-tested-where) describes, checks that the
 package agrees with it on every other line of that corpus and differs on
-these:
+these. Each row ends with the name, in brackets, that marks its lines in the
+corpus, and the test checks that this table names every divergence it knows
+and no other:
 
 | Expression | ClusterShell | `nodeset` |
 | --- | --- | --- |
 | `exe1,exe01` | two hosts, `exe[1,01]` | one host, `exe1` (padding identity) |
 | `exe[1-3]!exe02` | `exe[1-3]` | `exe[1,3]` (padding identity) |
-| `exe[01-100]` | error: padding length mismatch | `exe01` to `exe99` and `exe100` |
-| `exe0[0,10]` | `exe00`, `exe010` | error: adjacent numeric parts |
-| `exe[1-3] sub1` | whitespace is part of the name | union, `exe[1-3],sub1` |
-| `exe[1-3],` and `exe1,,exe2` | error | the empty operand is nothing |
-| `-oProxyCommand=x` | accepted as a name | error |
+| `exe[01-100]` | error: padding length mismatch | `exe01` to `exe99` and `exe100` (padding mismatch) |
+| `exe0[0,10]` | `exe00`, `exe010` | an error (adjacent numeric parts) |
+| `exe[1-3] sub1` | whitespace is part of the name | union, `exe[1-3],sub1` (whitespace) |
+| `exe[1-3],` and `exe1,,exe2` | error | the empty operand is nothing (empty operand) |
+| `-oProxyCommand=x` | accepted as a name | an error (leading dash) |
 
 Both reject `exe[1-010]`, `exe[001-10]`, a dangling `!`, `&` or `^`, and a set
 operator with no left operand. On the other lines of the corpus both name the
