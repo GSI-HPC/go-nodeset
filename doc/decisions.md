@@ -13,6 +13,7 @@ edited: a later one supersedes it, and the earlier one's status names it.
 | [2](#2-the-go-line-is-the-oldest-go-release-still-supported) | The go line is the oldest Go release still supported | accepted |
 | [3](#3-the-module-requires-nothing) | The module requires nothing | accepted |
 | [4](#4-a-release-is-a-signed-tag) | A release is a signed tag | accepted |
+| [5](#5-an-engine-of-its-own-rather-than-an-existing-go-library) | An engine of its own rather than an existing Go library | accepted |
 
 ## 1. Apache-2.0, and GSI holds the copyright
 
@@ -183,3 +184,63 @@ verification.
 - An OpenPGP key is trusted as the variable holds it: an expired key stops
   verifying on its own, a revoked one only once the variable holds its
   revocation.
+
+## 5. An engine of its own rather than an existing Go library
+
+Status: accepted
+
+### Context
+
+The engine was written for [clusterctl](https://github.com/GSI-HPC/clusterctl),
+whose [ADR 0002](https://github.com/GSI-HPC/clusterctl/blob/v0.4.0/doc/adr/0002-own-nodeset-engine.md)
+decided to write it rather than depend on one. That record gave as its
+reason that Go had no node set implementation. That was wrong.
+
+Before the engine moved here, in September 2026, a review of prior art
+looked for Go packages that parse node sets or host lists, ran them over the
+ClusterShell corpus in `testdata/clustershell.txt`, which then held 45
+expressions, and read what each requires:
+
+| Implementation | Expressions answered as the corpus records |
+| --- | --- |
+| This engine | 45 of 45 |
+| The best other Go library | 30 of 45 |
+| The next four | 28, 23, 23 and 22 of 45 |
+
+What stands in the way of the others:
+
+- grendel and iskylite are GPL-3.0, and live inside large application
+  modules.
+- DAOS's `lib/hostlist` reads pdsh's syntax rather than ClusterShell's, has
+  44 requirements, and has pseudo-versions only.
+- cc-lib/v2 has 35 requirements.
+- puttsk and the rest are stubs.
+
+No library that came close is usable as a dependency: the nearest are GPL,
+or pull in a large tree of requirements. CEA's sshproxy, a Go program from
+the authors of ClusterShell, loads a node set library written in Rust
+through purego rather than use a Go one.
+
+### Decision
+
+- The module keeps an engine of its own, and requires nothing
+  (decision 3).
+- Its compatibility with ClusterShell is measured rather than claimed. The
+  corpus records ClusterShell's answer for every expression, and a test
+  holds the package to it. Every place where the package decides otherwise
+  is marked in the corpus and listed in `doc/language.md`, and a test checks
+  that the two lists agree.
+- This corrects the prior-art claim of clusterctl's ADR 0002. That record
+  still holds in clusterctl's history as it was written.
+
+### Costs
+
+- Every bug is this module's to find and fix: there is no upstream to report
+  one to, and no other users finding them first.
+- ClusterShell moves on without it. The corpus records ClusterShell 1.10.1,
+  and `testdata/clustershell.py` has to be run again to notice where a
+  newer release changed its answers.
+- A second implementation of the language comes with divergences of its own,
+  which a user of both tools meets as a set that the two read differently.
+  `doc/language.md` lists them.
+- One maintainer releases one more module.
