@@ -1,11 +1,11 @@
 <!-- SPDX-FileCopyrightText: 2026 GSI Helmholtz Centre for Heavy Ion Research GmbH <http://www.gsi.de> -->
-<!-- SPDX-License-Identifier: LGPL-3.0-or-later -->
+<!-- SPDX-License-Identifier: Apache-2.0 -->
 
 # Testing the node set engine
 
 The `nodeset` package is tested on its own, with the standard library alone:
 table-driven unit tests, a fuzz target, a differential corpus recorded with
-ClusterShell, and tests of size and cost. [nodeset.md](nodeset.md) describes
+ClusterShell, and tests of size and cost. [language.md](language.md) describes
 the language they hold the package to.
 
 ## What is tested where
@@ -33,7 +33,7 @@ $ go test -run '^$' -fuzz FuzzParseFold -fuzztime 60s .
 **A differential corpus** holds node set expressions with the answer
 ClusterShell gave for each, in `testdata/clustershell.txt`. A test checks that
 the package names the same hosts, except on the lines marked as one of the
-divergences [nodeset.md](nodeset.md#where-this-differs-from-clustershell)
+divergences [language.md](language.md#where-this-differs-from-clustershell)
 lists, where it checks that the answers still differ, so that a divergence
 which goes away is noticed and taken out of the documentation too.
 `clustershell.py` next to it records the answers again, with ClusterShell

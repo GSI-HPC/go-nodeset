@@ -1,5 +1,5 @@
 <!-- SPDX-FileCopyrightText: 2026 GSI Helmholtz Centre for Heavy Ion Research GmbH <http://www.gsi.de> -->
-<!-- SPDX-License-Identifier: LGPL-3.0-or-later -->
+<!-- SPDX-License-Identifier: Apache-2.0 -->
 
 # Node sets
 
@@ -122,7 +122,8 @@ prints as it is.
 ## Where this differs from ClusterShell
 
 ClusterShell 1.10.1 was run over the corpus in
-`testdata/clustershell.txt` next to the package, and a test checks that the
+`testdata/clustershell.txt` next to the package, and a test, which
+[testing.md](testing.md#what-is-tested-where) describes, checks that the
 package agrees with it on every other line of that corpus and differs on
 these:
 
