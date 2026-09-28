@@ -1,7 +1,8 @@
 // SPDX-FileCopyrightText: 2026 GSI Helmholtz Centre for Heavy Ion Research GmbH <http://www.gsi.de>
-// SPDX-License-Identifier: LGPL-3.0-or-later
+// SPDX-License-Identifier: Apache-2.0
 
-// Package nodeset parses, folds and expands ClusterShell style node sets.
+// Package nodeset parses, folds and expands [ClusterShell] style node sets,
+// such as exe[0001-0010/2] or rack[1-2]node[01-04]!@drained.
 //
 // A node set expression names a set of hosts. Numeric parts of a host name
 // may be written as a bracketed range, and several expressions may be
@@ -46,6 +47,8 @@
 // spelling already held for that host, if there is one.
 //
 // These rules, and each place where this package differs from ClusterShell,
-// are set out in the node set language reference in the doc directory of the
-// repository this package comes from.
+// are set out in the [language reference].
+//
+// [ClusterShell]: https://clustershell.readthedocs.io/en/latest/tools/nodeset.html
+// [language reference]: https://github.com/GSI-HPC/go-nodeset/blob/main/doc/language.md
 package nodeset
