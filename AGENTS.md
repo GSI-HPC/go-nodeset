@@ -12,16 +12,32 @@ rest of the documentation. Personal, uncommitted instructions belong in
 
 ## Status
 
-A scaffold. The engine moves here with its history (`git filter-repo`) from
-the repository where it was written, which `README.md` names; the
-maintainer decides when. Do not copy engine code over by hand.
+The engine, moved here with its history from the repository where it was
+written, which `README.md` names. v0: the API may still change in a minor
+release (see Compatibility).
 
 ## Layout
 
 - `doc.go`: the package comment. The package stays at the root; a
   subdirectory `nodeset/` would stutter in the import path.
-- `doc/`: `README.md` maps the documentation, `decisions.md` records what
-  was decided and why, and `release.md` says how a release is cut.
+- `nodeset.go`: `NodeSet`, `Parse`, `ParseWith`, the options and the set
+  operations.
+- `parse.go`: the expression parser, its operators and the budget that
+  caps what an expression may name.
+- `rangeset.go`: bracketed ranges, their steps and padding.
+- `fold.go`: folding into `String()` and `Hostlist()`.
+- `resolver.go`: `Resolver`, the optional `Lister`, and `MapResolver`.
+- `*_test.go`: unit tests (`nodeset_test.go`), the ClusterShell corpus
+  (`clustershell_test.go`), `FuzzParseFold` (`fuzz_test.go`), the examples
+  (`example_test.go`), and `export_test.go`, which lets tests lower the
+  limits.
+- `testdata/`: the ClusterShell corpus, `clustershell.txt`, and
+  `clustershell.py`, which records ClusterShell's answers; failing fuzz
+  inputs go under `testdata/fuzz/`.
+- `doc/`: `README.md` maps the documentation, `language.md` is the
+  reference of the node set language, `testing.md` says how the package is
+  tested, `decisions.md` records what was decided and why, and
+  `release.md` says how a release is cut.
 - `.github/workflows/ci.yml`: tests on both Go lines, coverage, fuzzing,
   lint, Markdown, REUSE, govulncheck and the tag verification test.
   `release.yml`: verifies a pushed `v*` tag and publishes the release.
