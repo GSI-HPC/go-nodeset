@@ -18,25 +18,38 @@ only dependency.
 
 ## Status
 
-The engine was written as the
-[`nodeset`](https://github.com/GSI-HPC/clusterctl/tree/main/nodeset) package
-of [clusterctl](https://github.com/GSI-HPC/clusterctl), a command-line tool for
-administering HPC clusters. It moves here, with its history, once it has
-shipped in a clusterctl release and its API has held still for a while.
-Until then the package here holds no API.
+The engine was written as the `nodeset` package of
+[clusterctl](https://github.com/GSI-HPC/clusterctl), a command-line tool for
+administering HPC clusters, and moved here with its history once it had
+shipped in a clusterctl release. Why it is an engine of its own rather than
+an existing Go library is
+[decision 5](doc/decisions.md#5-an-engine-of-its-own-rather-than-an-existing-go-library).
 
-The API it will bring:
+## Usage
 
 ```go
 import "github.com/GSI-HPC/go-nodeset"
 
-ns, err := nodeset.Parse("exe[0001-0010]!exe0003")
+ns, err := nodeset.Parse("rack[1-2]node[01-04]!rack1node02")
 if err != nil {
 	return err
 }
-fmt.Println(ns)       // exe[0001-0002,0004-0010]
-fmt.Println(ns.Len()) // 9
+fmt.Println(ns)            // rack[1-2]node[01,03-04],rack2node02
+fmt.Println(ns.Len())      // 7
+fmt.Println(ns.Hostlist()) // rack1node[01,03-04],rack2node[01-04], for Slurm
+
+// @group references go through a resolver of your own.
+groups := nodeset.NewMapResolver("site", map[string]string{"gpu": "rack2node[03-04]"})
+cpu, err := nodeset.ParseWith("rack[1-2]node[01-04]!@gpu", groups)
+if err != nil {
+	return err
+}
+fmt.Println(cpu) // rack[1-2]node[01-02],rack1node[03-04]
 ```
+
+The language, and where it differs from ClusterShell, is described in
+[`doc/language.md`](doc/language.md); the API, with more examples, on
+[pkg.go.dev](https://pkg.go.dev/github.com/GSI-HPC/go-nodeset).
 
 ## Install
 
