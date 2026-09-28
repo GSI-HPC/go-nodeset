@@ -43,6 +43,7 @@ description: Drive a go-nodeset pull request to a mergeable state. Covers the lo
 |-----|------|
 | Test (Go floor), Test (Go current) | `go vet` and `go test -race` with the newest patch of the release line in `go.mod`, and in `mise.toml` |
 | Coverage | go-test-coverage against `.testcoverage.yml` |
+| Fuzz the parser | `make fuzz`: `FuzzParseFold` for 90 s; a failing input is uploaded as the `fuzz-corpus` artifact |
 | Lint | `make tidy` (no requirements, `go.mod` tidy), golangci-lint |
 | Markdown | `make lint-docs` |
 | REUSE | `reuse lint` |
