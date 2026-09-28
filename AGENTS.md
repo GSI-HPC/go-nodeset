@@ -22,8 +22,8 @@ maintainer decides when. Do not copy engine code over by hand.
   subdirectory `nodeset/` would stutter in the import path.
 - `doc/`: `README.md` maps the documentation, `decisions.md` records what
   was decided and why, and `release.md` says how a release is cut.
-- `.github/workflows/ci.yml`: tests on both Go lines, coverage, lint,
-  Markdown, REUSE, govulncheck and the tag verification test.
+- `.github/workflows/ci.yml`: tests on both Go lines, coverage, fuzzing,
+  lint, Markdown, REUSE, govulncheck and the tag verification test.
   `release.yml`: verifies a pushed `v*` tag and publishes the release.
 - `.github/actions/setup-go`: Go at the newest patch of the `floor` (go.mod)
   or `current` (mise.toml) release line.
@@ -37,6 +37,7 @@ make lint             # golangci-lint v2 (.golangci.yml, gofmt + goimports)
 make test             # go test -race ./...
 make floor            # vet and test with the go line of go.mod
 make cover            # go-test-coverage: every file at 100% (.testcoverage.yml)
+make fuzz             # FuzzParseFold for 90 s, as CI runs it (FUZZTIME=10m for longer)
 make tidy             # go mod tidy, and fail if go.mod requires anything
 make vuln             # govulncheck
 make reuse            # reuse lint (pip install reuse)

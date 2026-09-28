@@ -1,9 +1,10 @@
 # SPDX-FileCopyrightText: 2026 GSI Helmholtz Centre for Heavy Ion Research GmbH <http://www.gsi.de>
 # SPDX-License-Identifier: Apache-2.0
 
-GO      ?= go
-MODULE  := github.com/GSI-HPC/go-nodeset
-COVER   ?= coverage.out
+GO       ?= go
+MODULE   := github.com/GSI-HPC/go-nodeset
+COVER    ?= coverage.out
+FUZZTIME ?= 90s
 
 .PHONY: all
 all: lint test
@@ -24,6 +25,11 @@ floor:
 cover:
 	$(GO) test -race -coverprofile=$(COVER) -covermode=atomic ./...
 	go-test-coverage --config .testcoverage.yml
+
+## fuzz: fuzz the parser for FUZZTIME (90s); a failing input lands in testdata/fuzz/
+.PHONY: fuzz
+fuzz:
+	$(GO) test -run '^$$' -fuzz FuzzParseFold -fuzztime $(FUZZTIME) .
 
 ## lint: golangci-lint (.golangci.yml), gofmt and goimports included
 .PHONY: lint
