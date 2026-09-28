@@ -10,18 +10,10 @@ which pkg.go.dev publishes:
 
 | Document | What it covers |
 | --- | --- |
-| [decisions.md](decisions.md) | What was decided, why, and what it costs |
+| [language.md](language.md) | The node set language: the rules chosen and why, where they differ from ClusterShell, host lists for Slurm, and the limits |
+| [testing.md](testing.md) | What is tested and how, from fuzzing to the ClusterShell corpus and the size tests |
+| [decisions.md](decisions.md) | What was decided, why, and what it costs, the comparison with other Go node set libraries included |
 | [release.md](release.md) | Cutting, withdrawing and verifying a release |
-
-Two more arrive with the engine:
-
-- `language.md`: the node set language, the rules chosen and why, where
-  they differ from ClusterShell, host lists for Slurm, and the limits;
-- `testing.md`: what is tested and how, from fuzzing to the ClusterShell
-  corpus and the size tests.
-
-The measured comparison with other Go node set libraries arrives with them,
-as a decision in `decisions.md`.
 
 ## Everything else
 
@@ -40,8 +32,9 @@ as a decision in `decisions.md`.
 - A change of behaviour updates the doc comments, and the document here that
   describes it, in the same pull request.
 - A decision is never edited; a later one supersedes it.
-- Once `language.md` is here, the ClusterShell corpus test checks its list of
-  differences: a difference that goes away fails the test.
+- The ClusterShell corpus tests check the list of differences in
+  `language.md`: a difference that goes away fails them, and so does one
+  that the list and the corpus do not both name.
 
 Deliberately absent: a documentation site, a changelog, a `CONTRIBUTING.md`
 and a README per package. pkg.go.dev, the signed tags and `AGENTS.md` say
