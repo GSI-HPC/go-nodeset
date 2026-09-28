@@ -6,6 +6,7 @@ package nodeset_test
 import (
 	"bufio"
 	"os"
+	"regexp"
 	"sort"
 	"strings"
 	"testing"
@@ -70,6 +71,55 @@ func TestClusterShellCorpus(t *testing.T) {
 	}
 	if lines == 0 {
 		t.Fatal("the corpus is empty")
+	}
+}
+
+// divergenceRow matches a row of the table of divergences in
+// doc/language.md, whose last cell ends with the divergence in brackets.
+var divergenceRow = regexp.MustCompile(`\(([a-z ]+)\) \|$`)
+
+// TestDivergencesDocumented checks the table of divergences in
+// doc/language.md against divergences, both ways: the table names each
+// divergence the corpus may mark a line with, and no other.
+func TestDivergencesDocumented(t *testing.T) {
+	t.Parallel()
+
+	doc, err := os.ReadFile("doc/language.md")
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, section, ok := strings.Cut(string(doc), "\n## Where this differs from ClusterShell\n")
+	if !ok {
+		t.Fatal("doc/language.md has no section on where the package differs from ClusterShell")
+	}
+	section, _, _ = strings.Cut(section, "\n## ")
+
+	var rows []string
+	for line := range strings.Lines(section) {
+		if strings.HasPrefix(line, "|") {
+			rows = append(rows, strings.TrimSpace(line))
+		}
+	}
+	if len(rows) < 3 {
+		t.Fatal("doc/language.md has no table of divergences")
+	}
+
+	documented := map[string]bool{}
+	for _, row := range rows[2:] {
+		m := divergenceRow.FindStringSubmatch(row)
+		if m == nil {
+			t.Errorf("doc/language.md: the row %q names no divergence", row)
+			continue
+		}
+		if !divergences[m[1]] {
+			t.Errorf("doc/language.md names the %s divergence, which the corpus test does not know", m[1])
+		}
+		documented[m[1]] = true
+	}
+	for tag := range divergences {
+		if !documented[tag] {
+			t.Errorf("doc/language.md does not name the %s divergence", tag)
+		}
 	}
 }
 

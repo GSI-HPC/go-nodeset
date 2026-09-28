@@ -35,7 +35,9 @@ ClusterShell gave for each, in `testdata/clustershell.txt`. A test checks that
 the package names the same hosts, except on the lines marked as one of the
 divergences [language.md](language.md#where-this-differs-from-clustershell)
 lists, where it checks that the answers still differ, so that a divergence
-which goes away is noticed and taken out of the documentation too.
+which goes away is noticed and taken out of the documentation too. A second
+test reads the table of divergences in `doc/language.md` and checks that it
+names each divergence the corpus test knows, and no other.
 `clustershell.py` next to it records the answers again, with ClusterShell
 installed; the version it used is in the corpus header.
 
