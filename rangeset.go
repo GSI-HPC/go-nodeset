@@ -198,46 +198,77 @@ func (rs *rangeSet) String(autostep int) string {
 // list renders the values as comma separated ranges, without the brackets.
 // A range only joins values that read the same at the width of its first
 // value, so that parsing the output gives every value back its own width.
+//
+// It walks the values once, left to right, as ClusterShell's RangeSet does,
+// so that the two fold alike: a run grows while its step stays the same, and
+// when the step changes the run is written as a range if its step is 1 or it
+// holds at least autostep values, and value by value otherwise, its last value
+// then starting the next run. Below 2, autostep writes only runs of step 1 as
+// ranges.
 func (rs *rangeSet) list(autostep int) string {
-	var parts []string
 	vals, pads := rs.values, rs.pads
-	for i := 0; i < len(vals); {
-		run := pads[i]
-		j := i + 1
-		for j < len(vals) && vals[j] == vals[j-1]+1 && fits(vals[j], pads[j], run) {
-			j++
+	var parts []string
+	single := func(i int) { parts = append(parts, format(vals[i], pads[i])) }
+	stepped := func(first, last, step int) bool {
+		return step == 1 || (autostep >= 2 && (vals[last]-vals[first])/step+1 >= autostep)
+	}
+	run := func(first, last, step int) {
+		if first == last {
+			single(first)
+			return
 		}
-		if j-i >= 2 {
-			parts = append(parts, format(vals[i], run)+"-"+format(vals[j-1], run))
-			i = j
+		pad := pads[first]
+		r := format(vals[first], pad) + "-" + format(vals[last], pad)
+		if step > 1 {
+			r += "/" + strconv.Itoa(step)
+		}
+		parts = append(parts, r)
+	}
+
+	// The pending run holds the values from first to last; step is 0 while
+	// it holds one value.
+	first, last, step := 0, 0, 0
+	for k := 1; k < len(vals); k++ {
+		gap := vals[k] - vals[last]
+		width := !fits(vals[k], pads[k], pads[first])
+		if !width && (step == 0 || gap == step) {
+			last, step = k, gap
 			continue
 		}
-		if autostep >= 2 {
-			if k, step := rs.arithmeticRun(i); k-i >= autostep {
-				parts = append(parts, fmt.Sprintf("%s-%s/%d",
-					format(vals[i], run), format(vals[k-1], run), step))
-				i = k
-				continue
+		switch {
+		case step == 0:
+			single(first)
+			first, step = k, 0
+		case stepped(first, last, step):
+			run(first, last, step)
+			first, step = k, 0
+			if !width {
+				// ClusterShell carries the gap to the new value on as the
+				// step of the run it starts.
+				step = gap
 			}
+		case width:
+			for i := first; i <= last; i++ {
+				single(i)
+			}
+			first, step = k, 0
+		default:
+			for i := first; i < last; i++ {
+				single(i)
+			}
+			first, step = last, gap
 		}
-		parts = append(parts, format(vals[i], run))
-		i++
+		last = k
+	}
+	switch {
+	case step == 0:
+		single(first)
+	case stepped(first, last, step):
+		run(first, last, step)
+	default:
+		for i := first; i <= last; i++ {
+			single(i)
+		}
 	}
 	return strings.Join(parts, ",")
-}
-
-// arithmeticRun finds the longest run starting at i with a constant step
-// and values that read the same at the width of the first. list calls it only
-// where no run of consecutive values starts, so the step is greater than one.
-func (rs *rangeSet) arithmeticRun(i int) (end, step int) {
-	vals, pads := rs.values, rs.pads
-	if i+2 >= len(vals) || !fits(vals[i+1], pads[i+1], pads[i]) {
-		return i, 0
-	}
-	step = vals[i+1] - vals[i]
-	j := i + 2
-	for j < len(vals) && vals[j]-vals[j-1] == step && fits(vals[j], pads[j], pads[i]) {
-		j++
-	}
-	return j, step
 }

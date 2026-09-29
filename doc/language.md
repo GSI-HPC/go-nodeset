@@ -117,7 +117,11 @@ to included.
 
 `exe[1-10/2]` parses. Folding does not produce a step unless it is asked for,
 which is what ClusterShell's `--autostep` does; without it, `exe[1,3,5,7]`
-prints as it is.
+prints as it is. With `WithAutostep(n)` a run of at least n values with one
+step is written as a range with that step, and the values are taken from left
+to right as ClusterShell takes them, so that both write a set of one
+dimension alike: `node[154,176]` with a threshold of two is
+`node[154-176/22]`, and `exe[1,3,5,6]` with three is `exe[1-5/2,6]`.
 
 ## Where this differs from ClusterShell
 

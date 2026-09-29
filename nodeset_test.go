@@ -93,6 +93,7 @@ func TestFold(t *testing.T) {
 		{"a stray unpadded host is not renamed", "exe[0001-0010] exe11", "exe[0001-0010,11]"},
 		{"a wider value joins a padded run", "exe08 exe09 exe10 exe11", "exe[08-11]"},
 		{"widths split a run", "exe7 exe08 exe9", "exe[7,08,9]"},
+		{"a wider value ends a stepped run", "exe1 exe3 exe05", "exe[1,3,05]"},
 		{"patterns are listed alphabetically", "sub1 exe1", "exe1,sub1"},
 		{"a single valued dimension loses its brackets", "exe[1-1]", "exe1"},
 		{"two dimensions fold into one vector", "exe1-ib0 exe1-ib1 exe2-ib0 exe2-ib1", "exe[1-2]-ib[0-1]"},
@@ -186,13 +187,29 @@ func TestAutostep(t *testing.T) {
 	}
 
 	// A progression shorter than the threshold, or one whose values read
-	// differently at the width of its first, is left as it is.
-	for expr, want := range map[string]string{
-		"exe[1,3,5,7,9,20,22]": "exe[1-9/2,20,22]",
-		"exe[1,03,5,7]":        "exe[1,03,5,7]",
+	// differently at the width of its first, is left as it is. A threshold
+	// of two makes a step of any two values, the last two of a list
+	// included, as ClusterShell does.
+	for _, tc := range []struct {
+		expr     string
+		autostep int
+		want     string
+	}{
+		{"exe[1,3,5,7,9,20,22]", 3, "exe[1-9/2,20,22]"},
+		{"exe[1,03,5,7]", 3, "exe[1,03,5,7]"},
+		{"exe[1,3,5,7,9,20,22]", 2, "exe[1-9/2,20-22/2]"},
+		{"node[154,176]", 2, "node[154-176/22]"},
+		{"node[154,176]", 3, "node[154,176]"},
+		{"exe[1,03]", 2, "exe[1,03]"},
+		{"exe7", 2, "exe7"},
+		// A value next to a progression is left on its own, and so is a
+		// value of another width, as ClusterShell leaves them.
+		{"exe[1,3,5,6]", 3, "exe[1-5/2,6]"},
+		{"exe[1,3,5,6,10]", 3, "exe[1-5/2,6,10]"},
+		{"exe[1,3,5,007]", 3, "exe[1-5/2,007]"},
 	} {
-		if got := nodeset.MustParse(expr, nodeset.WithAutostep(3)).String(); got != want {
-			t.Errorf("String() of %q = %q, want %q", expr, got, want)
+		if got := nodeset.MustParse(tc.expr, nodeset.WithAutostep(tc.autostep)).String(); got != tc.want {
+			t.Errorf("String() of %q with autostep %d = %q, want %q", tc.expr, tc.autostep, got, tc.want)
 		}
 	}
 
