@@ -151,28 +151,15 @@ same hosts. Folded output may still be ordered differently: ClusterShell prints
 
 Beyond the corpus, a test runs ClusterShell itself over thousands of
 generated expressions ([testing.md](testing.md#what-is-tested-where)). Apart
-from the rows above and two differences in [groups](#groups), both name the
-same hosts for every one of them, and each reads what the other prints as the
-same hosts.
+from the rows above, both name the same hosts for every one of them, print
+them folded character for character alike, and list them in the same order.
 
-### Folded output of several dimensions
-
-Where every host name has at most one number, the package prints what
-ClusterShell prints, character for character, with autostep or without, and
-`Expand` lists the hosts in ClusterShell's order. With several numbers in a
-name there is more than one way to fold a set, and the two do not always
-choose the same one:
-
-- they may fold one set into different vectors: the package prints
-  `cn[001-032]-ib1,cn[005-032]-ib0` where ClusterShell prints
-  `cn[005-032]-ib[0-1],cn[001-004]-ib1`;
-- they may list the vectors of one pattern in another order: the package
-  orders them by their numbers, ClusterShell by how it built them;
-- `Expand` lists the hosts in numeric order, dimension by dimension from the
-  left, where ClusterShell lists them vector by vector.
-
-Either output parses back into the same set, in the package and in
-ClusterShell.
+With several numbers in a name there is more than one way to fold a set. The
+package folds it the way ClusterShell does: a set that is the product of its
+dimensions is one vector, and any other set is merged from its hosts in
+passes, the vectors ordered as ClusterShell orders them. `Expand` lists the
+hosts vector by vector, as ClusterShell does; within a pattern with one
+number it lists them in numeric order.
 
 ## Groups
 
@@ -233,5 +220,9 @@ allocation and a second of time for 2²⁰ hosts.
 Bounds and steps are plain decimal numbers of at most eighteen digits, so no
 arithmetic on them can overflow.
 
-Folding costs O(n log n) in the number of hosts. Parsing and printing a set of
-a million hosts, the most an expression may name, takes a few seconds.
+Folding a set of one number costs O(n log n) in the number of hosts. A set
+with several numbers in its names is folded in passes, each of which costs
+about O(n log n); ClusterShell compares every pair of vectors in some of them,
+and the package finds the same pairs through an index instead. Parsing and
+printing a set of a million hosts, the most an expression may name, takes a
+few seconds.

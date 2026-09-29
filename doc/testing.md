@@ -67,6 +67,18 @@ ClusterShell's answers have changed.
 expressions, or others. The test is skipped where `NODESET_CLUSTERSHELL_PYTHON`
 is not set, so that `go test` needs nothing but Go.
 
+**The folding of names with several numbers** is checked against a
+reference as well. `TestFoldNDMatchesReference` folds random sets of two to
+four dimensions, some of them with values at two widths, both with the
+package and with a plain transcription of ClusterShell's `RangeSetND`
+folding, which compares every pair of vectors, and requires the same vectors
+in the same order. Locally, `make clustershell` sets up ClusterShell in
+`.clustershell/`, runs the test, and records the corpus again, failing if
+ClusterShell's answers have changed.
+`NODESET_CLUSTERSHELL_CASES` and `NODESET_CLUSTERSHELL_SEED` run more
+expressions, or others. The test is skipped where `NODESET_CLUSTERSHELL_PYTHON`
+is not set, so that `go test` needs nothing but Go.
+
 **Size and cost** are tests of their own. One folds sets of a quarter of a
 million hosts, which would take more than a minute if folding were quadratic.
 One lowers the limits to a hundred and checks that every way of exceeding them

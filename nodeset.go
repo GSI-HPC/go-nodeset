@@ -6,7 +6,6 @@ package nodeset
 import (
 	"maps"
 	"slices"
-	"sort"
 	"strings"
 )
 
@@ -130,8 +129,10 @@ func (ns *NodeSet) lookup(name string) (node, bool) {
 	return n, ok
 }
 
-// Expand returns the host names in ascending order: by pattern first, then by
-// each numeric dimension from left to right.
+// Expand returns the host names in the order ClusterShell lists them: by
+// pattern first; within a pattern with one number, in numeric order; within
+// one with several, vector by vector as String folds them, each with its last
+// number varying fastest.
 func (ns *NodeSet) Expand() []string {
 	nodes := ns.sorted()
 	out := make([]string, len(nodes))
@@ -141,14 +142,20 @@ func (ns *NodeSet) Expand() []string {
 	return out
 }
 
-// sorted returns the members in expansion order.
+// sorted returns the members in expansion order: by pattern, and within a
+// pattern with one number numerically, within one with several vector by
+// vector as the set folds, as ClusterShell lists them.
 func (ns *NodeSet) sorted() []node {
-	nodes := make([]node, 0, len(ns.nodes))
-	for _, n := range ns.nodes {
-		nodes = append(nodes, n)
+	out := make([]node, 0, len(ns.nodes))
+	for _, p := range ns.byPattern() {
+		if len(p.nodes[0].vals) > 1 {
+			out = append(out, expandND(p.pattern, p.nodes)...)
+			continue
+		}
+		slices.SortFunc(p.nodes, func(a, b node) int { return slices.Compare(a.vals, b.vals) })
+		out = append(out, p.nodes...)
 	}
-	sort.Slice(nodes, func(i, j int) bool { return lessNode(nodes[i], nodes[j]) })
-	return nodes
+	return out
 }
 
 // String renders the set in folded form, which Parse reads back as the same
@@ -245,15 +252,6 @@ func (ns *NodeSet) symmetricDifference(other *NodeSet) {
 			ns.nodes[k] = v
 		}
 	}
-}
-
-// lessNode orders hosts by pattern, then numerically by dimension, so that
-// exe2 sorts before exe10.
-func lessNode(a, b node) bool {
-	if a.pattern != b.pattern {
-		return a.pattern < b.pattern
-	}
-	return slices.Compare(a.vals, b.vals) < 0
 }
 
 // Hostlist renders the set in the syntax Slurm and FreeIPMI accept: one

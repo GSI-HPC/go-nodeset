@@ -34,7 +34,7 @@ ns, err := nodeset.Parse("rack[1-2]node[01-04]!rack1node02")
 if err != nil {
 	return err
 }
-fmt.Println(ns)            // rack[1-2]node[01,03-04],rack2node02
+fmt.Println(ns)            // rack2node[01-04],rack1node[01,03-04]
 fmt.Println(ns.Len())      // 7
 fmt.Println(ns.Hostlist()) // rack1node[01,03-04],rack2node[01-04], for Slurm
 
@@ -44,7 +44,7 @@ cpu, err := nodeset.ParseWith("rack[1-2]node[01-04]!@gpu", groups)
 if err != nil {
 	return err
 }
-fmt.Println(cpu) // rack[1-2]node[01-02],rack1node[03-04]
+fmt.Println(cpu) // rack1node[01-04],rack2node[01-02]
 ```
 
 The language, and where it differs from ClusterShell, is described in

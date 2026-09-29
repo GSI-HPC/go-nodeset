@@ -61,26 +61,15 @@ func unitVectors(pattern string, nodes []node) []vector {
 	return vectors
 }
 
-// foldPattern merges the hosts of one pattern into as few vectors as it can.
-// Each pass picks one dimension and unions it across vectors whose other
-// dimensions are identical, which is repeated until nothing merges any more.
+// foldPattern merges the hosts of one pattern into vectors. A pattern with
+// one number folds into one vector, and one with several numbers folds as
+// foldND says.
 func foldPattern(pattern string, nodes []node, autostep int) []vector {
-	vectors := unitVectors(pattern, nodes)
-	if len(vectors) < 2 || len(vectors[0].dims) == 0 {
-		sortVectors(vectors)
-		return vectors
+	if len(nodes[0].vals) > 1 {
+		return foldVectors(pattern, nodes)
 	}
-
-	for changed := true; changed; {
-		changed = false
-		for axis := range vectors[0].dims {
-			merged, did := foldAxis(vectors, axis, autostep)
-			vectors = merged
-			changed = changed || did
-		}
-	}
-	sortVectors(vectors)
-	return vectors
+	merged, _ := foldAxis(unitVectors(pattern, nodes), 0, autostep)
+	return merged
 }
 
 // foldOneAxis merges the hosts of one pattern along a single dimension, the
