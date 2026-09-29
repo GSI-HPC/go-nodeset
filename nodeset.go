@@ -26,8 +26,9 @@ type NodeSet struct {
 type Option func(*NodeSet)
 
 // WithAutostep folds arithmetic progressions of at least n elements into
-// "first-last/step" form. ClusterShell disables this by default, and so does
-// this package; n below 2 keeps it disabled.
+// "first-last/step" form, taking the values from left to right as
+// ClusterShell's autostep does. ClusterShell disables this by default, and so
+// does this package; n below 2 keeps it disabled.
 func WithAutostep(n int) Option {
 	return func(ns *NodeSet) { ns.autostep = n }
 }
