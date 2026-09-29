@@ -14,7 +14,8 @@ edited: a later one supersedes it, and the earlier one's status names it.
 | [3](#3-the-module-requires-nothing) | The module requires nothing | accepted |
 | [4](#4-a-release-is-a-signed-tag) | A release is a signed tag | accepted |
 | [5](#5-an-engine-of-its-own-rather-than-an-existing-go-library) | An engine of its own rather than an existing Go library | accepted |
-| [6](#6-clustershell-itself-is-the-reference-in-ci) | ClusterShell itself is the reference in CI | accepted |
+| [6](#6-clustershell-itself-is-the-reference-in-ci) | ClusterShell itself is the reference in CI | accepted, in part superseded by [7](#7-the-package-prints-what-clustershell-prints) |
+| [7](#7-the-package-prints-what-clustershell-prints) | The package prints what ClusterShell prints | accepted |
 
 ## 1. Apache-2.0, and GSI holds the copyright
 
@@ -248,7 +249,8 @@ through purego rather than use a Go one.
 
 ## 6. ClusterShell itself is the reference in CI
 
-Status: accepted
+Status: accepted, in part superseded by
+[decision 7](#7-the-package-prints-what-clustershell-prints)
 
 ### Context
 
@@ -305,3 +307,60 @@ that the output differs in these ways:
 - The generator keeps out of the known differences, so a difference in a
   shape it does not generate, such as one host at two widths or whitespace,
   is caught only by the corpus.
+
+## 7. The package prints what ClusterShell prints
+
+Status: accepted
+
+### Context
+
+Decision 6 held the package to ClusterShell's hosts everywhere, and to its
+printed output only where every host name has one number. It kept four
+differences as the package's own: the folding of names with several numbers,
+the order `Expand` lists them in, the source of a bare `@group` inside a group,
+and an unknown group being an error. The maintainer asked for all four to go
+before the first release, except that `exe[1-2-3]` stays an error rather
+than naming hosts with negative numbers, as ClusterShell reads it.
+
+### Decision
+
+- A set whose names hold several numbers folds as ClusterShell's `RangeSetND`
+  folds it: a set that is the product of its dimensions is one vector, and
+  any other set is merged from its hosts in the passes ClusterShell makes,
+  the vectors sorted before each pass as ClusterShell sorts them, first and
+  last values compared as text. `String` writes the vectors in that order.
+- `Expand`, and `Split` with it, list the hosts of such a pattern vector by
+  vector, the last number varying fastest, as ClusterShell iterates a set.
+- ClusterShell compares every pair of vectors in its last passes. The package
+  finds the vectors that can merge through an index by all their dimensions
+  but one, and takes them in ClusterShell's order, so the result is the same
+  and a pass stays near linear. A test compares it with a plain transcription
+  of ClusterShell's loop.
+- A bare `@group` inside a group of a named source is resolved in that
+  source.
+- `MapResolver` answers a group it does not hold, and `@` alone, with no
+  hosts, as a static source of ClusterShell does. The engine hands every
+  reference to the resolver, an empty name included, and fails with any
+  error a resolver returns, so a resolver for which an unknown group is an
+  error keeps it one.
+- The comparison with ClusterShell requires the same folded output and the
+  same order of `Expand` for every generated expression, with groups that
+  refer to groups of their own source bare and groups the sources do not
+  hold.
+
+### Costs
+
+- The folded output, `Expand` and `Split` change for sets whose names hold
+  several numbers. clusterctl v0.4.0, where the engine came from, prints the
+  old form; a program that stored or compared it sees the new one. The module
+  has no release yet, so no release of it changes.
+- ClusterShell's folding can split a set into more vectors than the old one
+  did, and it depends on details such as comparing numbers as text, which
+  the package now reproduces rather than chooses.
+- Folding a large set that is no product takes longer: up to twice the old
+  fold's time on the sets measured, about two seconds for 950,000 hosts with
+  holes in them, and `Expand` folds such a set before it lists it. The index
+  and the sets a linear pass grows in are there to keep it near linear, and
+  they are code of their own to keep right.
+- A program that relied on `MapResolver` to refuse a mistyped group now
+  selects nothing instead, unless it supplies a resolver of its own.

@@ -54,18 +54,13 @@ ClusterShell's `NodeSet`, and compares the answers with the package's:
   to 4.
 
 Both must reject the same expressions and name the same hosts, and each must
-read what the other prints, the host list included, as the same hosts. Where
-every host name has at most one number, `String` must be ClusterShell's
-folded form and `Expand` must list the hosts in ClusterShell's order. The
-generated expressions stay out of the differences
+read what the other prints, the host list included, as the same hosts;
+`String` must be ClusterShell's folded form and `Expand` must list the hosts
+in ClusterShell's order. The groups refer to groups of their own source bare,
+and the generated expressions include groups the sources do not hold. They
+stay out of the differences
 [language.md](language.md#where-this-differs-from-clustershell) lists: each
-number of a name has one width in every expression, and a group names another
-with its source. Locally, `make clustershell` sets up ClusterShell in
-`.clustershell/`, runs the test, and records the corpus again, failing if
-ClusterShell's answers have changed.
-`NODESET_CLUSTERSHELL_CASES` and `NODESET_CLUSTERSHELL_SEED` run more
-expressions, or others. The test is skipped where `NODESET_CLUSTERSHELL_PYTHON`
-is not set, so that `go test` needs nothing but Go.
+number of a name has one width in every expression.
 
 **The folding of names with several numbers** is checked against a
 reference as well. `TestFoldNDMatchesReference` folds random sets of two to
