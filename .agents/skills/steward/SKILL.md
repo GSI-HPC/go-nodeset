@@ -23,9 +23,11 @@ description: Drive a go-nodeset pull request to a mergeable state. Covers the lo
 4. `make tidy` leaves `go.mod` unchanged and reports no requirements.
 5. `make reuse` passes (`pip install reuse`), and `make lint-docs` passes if
    Markdown changed.
-6. If `.github/` changed: `actionlint`, `shellcheck .github/scripts/*.sh` and
+6. If parsing, folding or `testdata/` changed: `make clustershell`, which
+   needs `python3` and compares the package with ClusterShell itself.
+7. If `.github/` changed: `actionlint`, `shellcheck .github/scripts/*.sh` and
    `make test-release`, which needs `ssh-keygen` and `gpg`.
-7. Re-read the diff: both SPDX lines on new files, doc comments on exported
+8. Re-read the diff: both SPDX lines on new files, doc comments on exported
    identifiers, tests for new behaviour, a section in `doc/decisions.md`
    for a decision, `README.md`, `AGENTS.md` and the documents in `doc/` in
    step with the change, and Conventional Commit messages with bullet
@@ -43,6 +45,7 @@ description: Drive a go-nodeset pull request to a mergeable state. Covers the lo
 |-----|------|
 | Test (Go floor), Test (Go current) | `go vet` and `go test -race` with the newest patch of the release line in `go.mod`, and in `mise.toml` |
 | Coverage | go-test-coverage against `.testcoverage.yml` |
+| Compare with ClusterShell | `make clustershell`: `TestClusterShellOracle` against the pinned ClusterShell, then the corpus recorded again and diffed |
 | Fuzz the parser | `make fuzz`: `FuzzParseFold` for 90 s; a failing input is uploaded as the `fuzz-corpus` artifact |
 | Lint | `make tidy` (no requirements, `go.mod` tidy), golangci-lint |
 | Markdown | `make lint-docs` |

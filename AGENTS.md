@@ -31,15 +31,18 @@ release (see Compatibility).
   (`clustershell_test.go`), `FuzzParseFold` (`fuzz_test.go`), the examples
   (`example_test.go`), and `export_test.go`, which lets tests lower the
   limits.
-- `testdata/`: the ClusterShell corpus, `clustershell.txt`, and
-  `clustershell.py`, which records ClusterShell's answers; failing fuzz
-  inputs go under `testdata/fuzz/`.
+- `testdata/`: the ClusterShell corpus, `clustershell.txt`;
+  `clustershell.py`, which records ClusterShell's answers;
+  `clustershell_oracle.py`, which answers `TestClusterShellOracle`
+  (`clustershell_oracle_test.go`); and `requirements.txt`, the ClusterShell
+  version both use. Failing fuzz inputs go under `testdata/fuzz/`.
 - `doc/`: `README.md` maps the documentation, `language.md` is the
   reference of the node set language, `testing.md` says how the package is
   tested, `decisions.md` records what was decided and why, and
   `release.md` says how a release is cut.
-- `.github/workflows/ci.yml`: tests on both Go lines, coverage, fuzzing,
-  lint, Markdown, REUSE, govulncheck and the tag verification test.
+- `.github/workflows/ci.yml`: tests on both Go lines, coverage, fuzzing, the
+  comparison with ClusterShell, lint, Markdown, REUSE, govulncheck and the
+  tag verification test.
   `release.yml`: verifies a pushed `v*` tag and publishes the release.
 - `.github/actions/setup-go`: Go at the newest patch of the `floor` (go.mod)
   or `current` (mise.toml) release line.
@@ -54,6 +57,7 @@ make test             # go test -race ./...
 make floor            # vet and test with the go line of go.mod
 make cover            # go-test-coverage: every file at 100% (.testcoverage.yml)
 make fuzz             # FuzzParseFold for 90 s, as CI runs it (FUZZTIME=10m for longer)
+make clustershell     # compare with ClusterShell itself (needs python3; CLUSTERSHELL_CASES=)
 make tidy             # go mod tidy, and fail if go.mod requires anything
 make vuln             # govulncheck
 make reuse            # reuse lint (pip install reuse)
