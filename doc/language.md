@@ -142,6 +142,7 @@ and no other:
 | `exe[1-3] sub1` | whitespace is part of the name | union, `exe[1-3],sub1` (whitespace) |
 | `exe[1-3],` and `exe1,,exe2` | error | the empty operand is nothing (empty operand) |
 | `-oProxyCommand=x` | accepted as a name | an error (leading dash) |
+| `exe[1-2-3]` | the hosts `exe-2` to `exe3` | an error (malformed range) |
 
 Both reject `exe[1-010]`, `exe[001-10]`, a dangling `!`, `&` or `^`, and a set
 operator with no left operand. On the other lines of the corpus both name the
