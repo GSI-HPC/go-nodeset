@@ -25,7 +25,9 @@ release (see Compatibility).
 - `parse.go`: the expression parser, its operators and the budget that
   caps what an expression may name.
 - `rangeset.go`: bracketed ranges, their steps and padding.
-- `fold.go`: folding into `String()` and `Hostlist()`.
+- `fold.go`: folding into `String()` and `Hostlist()`; `foldnd.go`: folding
+  names with several numbers as ClusterShell does, and the order `Expand`
+  lists them in.
 - `resolver.go`: `Resolver`, the optional `Lister`, and `MapResolver`.
 - `*_test.go`: unit tests (`nodeset_test.go`), the ClusterShell corpus
   (`clustershell_test.go`), `FuzzParseFold` (`fuzz_test.go`), the examples

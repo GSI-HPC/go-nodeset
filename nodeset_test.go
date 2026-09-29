@@ -97,9 +97,10 @@ func TestFold(t *testing.T) {
 		{"patterns are listed alphabetically", "sub1 exe1", "exe1,sub1"},
 		{"a single valued dimension loses its brackets", "exe[1-1]", "exe1"},
 		{"two dimensions fold into one vector", "exe1-ib0 exe1-ib1 exe2-ib0 exe2-ib1", "exe[1-2]-ib[0-1]"},
-		// Folding merges along the leftmost dimension first, so a ragged set
-		// splits on the dimension that varies last.
-		{"a ragged set folds on the first dimension", "exe1-ib0 exe1-ib1 exe2-ib0", "exe[1-2]-ib0,exe1-ib1"},
+		// A set that is no product folds as ClusterShell folds it: the hosts
+		// in numeric order, merged with their neighbours first.
+		{"a ragged set folds as ClusterShell folds it", "exe1-ib0 exe1-ib1 exe2-ib0", "exe1-ib[0-1],exe2-ib0"},
+		{"the larger vector comes first", "cn[001-032]-ib[0-1]!cn[001-004]-ib0", "cn[005-032]-ib[0-1],cn[001-004]-ib1"},
 		{"domains fold on the host part", "exe1.hpc.example.org exe2.hpc.example.org", "exe[1-2].hpc.example.org"},
 		{"an empty set renders empty", "", ""},
 	}
@@ -156,6 +157,18 @@ func TestFoldRoundTrip(t *testing.T) {
 // every merge turns this test from milliseconds into minutes.
 func TestFoldLargeSets(t *testing.T) {
 	t.Parallel()
+
+	// A set that is no product folds in passes over its hosts, which have to
+	// stay close to linear too: comparing every pair of vectors, as
+	// ClusterShell does, takes minutes here.
+	t.Run("a set with holes", func(t *testing.T) {
+		t.Parallel()
+		ns := nodeset.MustParse("rack[1-256]-exe[1-256]!rack[1-256/7]-exe[1-256/3]")
+		folded := ns.String()
+		if back := nodeset.MustParse(folded); back.Len() != ns.Len() || back.String() != folded {
+			t.Errorf("String() = %.60q does not read back as the same set", folded)
+		}
+	})
 
 	for _, expr := range []string{"exe[1-262144]", "rack[1-256]-exe[1-256]"} {
 		t.Run(expr, func(t *testing.T) {
@@ -404,6 +417,8 @@ func TestHostlist(t *testing.T) {
 		// dimension that gives the fewest names, the last one on a tie.
 		{"exe[1-2]-ib[0-1]", "exe1-ib[0-1],exe2-ib[0-1]"},
 		{"r[01-02]n[001-100]", "r01n[001-100],r02n[001-100]"},
+		// Names that begin alike are ordered by the numbers that follow.
+		{"a1b2c2,a1b1c1", "a1b1c1,a1b2c2"},
 		{"exe[0001-0100].mgmt.dc2.example.org", "exe[0001-0100].mgmt.dc2.example.org"},
 		// Slurm and FreeIPMI read no steps, whatever the set was parsed with.
 		{"exe[1,3,5,7]", "exe[1,3,5,7]"},
