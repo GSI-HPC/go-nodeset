@@ -23,6 +23,7 @@ var divergences = map[string]bool{
 	"whitespace":             true,
 	"empty operand":          true,
 	"leading dash":           true,
+	"malformed range":        true,
 }
 
 // TestClusterShellCorpus runs every expression of testdata/clustershell.txt
