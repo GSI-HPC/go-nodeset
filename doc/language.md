@@ -174,16 +174,16 @@ so a group may refer to other groups. Nesting is cut off after sixteen levels,
 which also reports a cycle rather than looping. The hosts of every group an
 expression refers to count towards its [limits](#limits).
 
-Two things differ from ClusterShell here:
+A bare `@group` inside a group of a named source is looked up in that
+source, as ClusterShell does: a group of source `ib` that refers to `@fabric`
+means `@ib:fabric`. A bare `@group` anywhere else is handed to the resolver
+with an empty source.
 
-- A bare `@group` inside a group is handed to the resolver with an empty
-  source, like any other. ClusterShell looks it up in the source of the group
-  that names it, so a group of source `ib` that refers to `@fabric` means
-  `@ib:fabric` there. A group that means another group of its own source
-  writes the source out.
-- A group the resolver does not know is an error, and so is `@` alone.
-  ClusterShell answers a group its static source does not know with no
-  hosts, so a typing error there selects nothing instead of failing.
+What a group the resolver does not know means is the resolver's to decide.
+`MapResolver` answers it with no hosts, as ClusterShell's static sources do,
+and answers `@` alone the same way. A program for which a mistyped group
+must not select nothing supplies a resolver that returns an error, and
+parsing fails with it.
 
 ## Rendering for other tools
 

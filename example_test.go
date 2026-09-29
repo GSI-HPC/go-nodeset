@@ -98,10 +98,15 @@ func ExampleParseWith() {
 	}
 	fmt.Println(ns.Len())
 
-	_, err = nodeset.ParseWith("@login", res)
+	// A group the table does not hold names no hosts, as in ClusterShell; a
+	// source it does not hold is an error.
+	ns, err = nodeset.ParseWith("@login,exe0001", res)
+	fmt.Println(ns, err)
+	_, err = nodeset.ParseWith("@slurm:idle", res)
 	fmt.Println(err)
 	// Output:
 	// exe[0090-0096]
 	// 100
-	// group @login: unknown group "login" in source "site"
+	// exe0001 <nil>
+	// group @slurm:idle: unknown group source "slurm"
 }

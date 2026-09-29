@@ -22,10 +22,14 @@ const maxGroupDepth = 16
 //
 // The source is passed on as written, and is empty for a bare @group: which
 // source that means, the default one or a search of several, is the
-// resolver's to decide.
+// resolver's to decide. A bare @group inside a group of a named source is
+// passed on with that source, as ClusterShell resolves it.
 type Resolver interface {
-	// Resolve returns the expression a group names. An unknown group is an
-	// error; an empty group returns an empty expression.
+	// Resolve returns the expression a group names; an empty group returns
+	// an empty expression. What an unknown group means is the resolver's to
+	// decide: an error, for a program that must not select nothing by
+	// mistake, or no hosts, as ClusterShell's static sources and MapResolver
+	// answer. The name is empty for a reference written @ or @source:.
 	Resolve(source, group string) (string, error)
 	// All returns the expression naming every host a source knows. It
 	// answers the reference @source:*, or @* for an empty source.
@@ -55,9 +59,6 @@ func resolveGroup(ref string, res Resolver, depth int, b *budget) (*NodeSet, err
 	if before, after, ok := strings.Cut(ref, ":"); ok {
 		source, group = before, after
 	}
-	if group == "" {
-		return nil, fmt.Errorf("empty group name in @%s", ref)
-	}
 
 	var (
 		expr string
@@ -74,7 +75,29 @@ func resolveGroup(ref string, res Resolver, depth int, b *budget) (*NodeSet, err
 	if strings.TrimSpace(expr) == "" {
 		return New(), nil
 	}
+	if source != "" {
+		if in, ok := res.(inSource); ok {
+			res = in.Resolver
+		}
+		res = inSource{Resolver: res, source: source}
+	}
 	return parseExpression(expr, res, depth+1, b)
+}
+
+// inSource resolves the bare references inside a group of a named source in
+// that source, as ClusterShell does: a group of source ib that refers to
+// @fabric means @ib:fabric.
+type inSource struct {
+	Resolver
+	source string
+}
+
+func (r inSource) Resolve(source, group string) (string, error) {
+	return r.Resolver.Resolve(cmp.Or(source, r.source), group)
+}
+
+func (r inSource) All(source string) (string, error) {
+	return r.Resolver.All(cmp.Or(source, r.source))
 }
 
 // MapResolver resolves groups from an in-memory table, such as groups a
@@ -94,18 +117,16 @@ func NewMapResolver(source string, groups map[string]string) *MapResolver {
 	}
 }
 
-// Resolve implements Resolver. An empty source means the default one.
+// Resolve implements Resolver. An empty source means the default one. A
+// group the source does not hold names no hosts, as it does in a static
+// source of ClusterShell; a source the table does not hold is an error.
 func (m *MapResolver) Resolve(source, group string) (string, error) {
 	source = cmp.Or(source, m.Default)
 	groups, ok := m.Groups[source]
 	if !ok {
 		return "", fmt.Errorf("unknown group source %q", source)
 	}
-	expr, ok := groups[group]
-	if !ok {
-		return "", fmt.Errorf("unknown group %q in source %q", group, source)
-	}
-	return expr, nil
+	return groups[group], nil
 }
 
 // List implements Lister. An empty source means the default one.
