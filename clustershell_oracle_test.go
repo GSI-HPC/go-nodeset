@@ -21,22 +21,20 @@ import (
 
 // oracleGroups are the group sources both implementations resolve groups
 // from. Their hosts follow the templates below, so that a group and a term
-// never write one host with two paddings. A group refers to another with its
-// source written out: ClusterShell looks a bare @group up in the source of
-// the group that names it, and the package asks the resolver with an empty
-// source (doc/language.md).
+// never write one host with two paddings. Groups refer to other groups of
+// their own source bare and to those of another with the source written out.
 var oracleGroups = map[string]map[string]string{
 	"site": {
 		"compute": "exe[0001-0120]",
 		"gpu":     "gpu[01-16].hpc.example.org",
 		"racks":   "rack[01-04]n[01-08]",
-		"cpu":     "@site:compute!exe[0100-0120]",
+		"cpu":     "@compute!exe[0100-0120]",
 		"login":   "login,head",
 	},
 	"ib": {
 		"fabric": "cn[001-032]-ib[0-1]",
-		"edge":   "@ib:fabric&cn[001-004]-ib0",
-		"mixed":  "@site:login,sw[1-4]p[01-48]",
+		"edge":   "@fabric&cn[001-004]-ib0",
+		"mixed":  "@site:login,sw[1-4]p[01-48],@edge",
 	},
 }
 
@@ -44,6 +42,7 @@ var oracleGroups = map[string]map[string]string{
 var oracleRefs = []string{
 	"@compute", "@gpu", "@racks", "@cpu", "@login", "@site:compute",
 	"@ib:fabric", "@ib:edge", "@ib:mixed", "@*", "@site:*", "@ib:*",
+	"@nosuch", "@ib:nosuch", "@", "@ib:",
 }
 
 // An oracleTemplate is the shape of a host name: literals around numeric
@@ -69,8 +68,8 @@ var oracleTemplates = []oracleTemplate{
 }
 
 // oracleRejected are expressions both implementations must refuse. Where
-// the package refuses what ClusterShell accepts, an unknown group or a
-// malformed range such as exe[1-2-3], doc/language.md says so.
+// the package refuses what ClusterShell accepts, a malformed range such as
+// exe[1-2-3], doc/language.md says so.
 var oracleRejected = []string{
 	"exe[", "exe]", "exe[]", "exe[5-1]", "exe[1-3", "exe1-3]", "exe[a-b]",
 	"exe[1-3/0]", "exe[1-3/x]", "exe[[1-2]]", "exe[1,2", "&exe1", "!exe1",
@@ -102,14 +101,11 @@ type oracleAnswer struct {
 //   - both name the same hosts;
 //   - ClusterShell reads String and Hostlist back as those hosts, and the
 //     package reads ClusterShell's folded form back as those hosts;
-//   - where every host name has at most one number, String is ClusterShell's
-//     folded form, autostep included, and Expand lists the hosts in
-//     ClusterShell's order.
+//   - String is ClusterShell's folded form, autostep included, and Expand
+//     lists the hosts in ClusterShell's order.
 //
-// With several numbers in a name, folding has more than one answer, and the
-// two pick different ones; doc/language.md says how they differ. Lines of the
-// corpus are held to the same hosts only, since some write one host at two
-// widths, which ClusterShell orders differently.
+// Lines of the corpus are held to the same hosts only, since some write one
+// host at two widths, which ClusterShell orders differently.
 //
 // It needs a Python with the ClusterShell of testdata/requirements.txt and is
 // skipped unless NODESET_CLUSTERSHELL_PYTHON names it; make clustershell sets
@@ -195,7 +191,7 @@ func TestClusterShellOracle(t *testing.T) {
 			fail("%q: nodeset does not read ClusterShell's %q as the same hosts (%v)", req.Expr, their.Folded, err)
 		}
 
-		if req.corpus || slices.ContainsFunc(hosts, oracleMultiDim) {
+		if req.corpus {
 			continue
 		}
 		if got := our.ns.String(); got != their.Folded {
@@ -205,17 +201,6 @@ func TestClusterShellOracle(t *testing.T) {
 			fail("%q: nodeset lists %v, ClusterShell %v", req.Expr, oracleShort(hosts), oracleShort(their.Hosts))
 		}
 	}
-}
-
-// oracleMultiDim reports whether a host name has more than one number.
-func oracleMultiDim(host string) bool {
-	runs := 0
-	for i := range len(host) {
-		if host[i] >= '0' && host[i] <= '9' && (i == 0 || host[i-1] < '0' || host[i-1] > '9') {
-			runs++
-		}
-	}
-	return runs > 1
 }
 
 // oracleAsk runs the oracle script once over every request and returns
