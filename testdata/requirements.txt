@@ -1,0 +1,7 @@
+# SPDX-FileCopyrightText: 2026 GSI Helmholtz Centre for Heavy Ion Research GmbH <http://www.gsi.de>
+# SPDX-License-Identifier: Apache-2.0
+#
+# The ClusterShell that clustershell.txt was recorded with and that
+# TestClusterShellOracle compares the package against (doc/testing.md).
+# Raising it means recording the corpus again with clustershell.py.
+ClusterShell==1.10.1

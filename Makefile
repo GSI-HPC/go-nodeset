@@ -26,6 +26,23 @@ cover:
 	$(GO) test -race -coverprofile=$(COVER) -covermode=atomic ./...
 	go-test-coverage --config .testcoverage.yml
 
+## clustershell: compare with ClusterShell itself, and record the corpus again (needs python3)
+CLUSTERSHELL       ?= .clustershell
+CLUSTERSHELL_CASES ?= 20000
+.PHONY: clustershell
+clustershell: $(CLUSTERSHELL)/installed
+	NODESET_CLUSTERSHELL_PYTHON=$(abspath $(CLUSTERSHELL)/bin/python) NODESET_CLUSTERSHELL_CASES=$(CLUSTERSHELL_CASES) \
+		$(GO) test -count=1 -run '^TestClusterShellOracle$$' -v .
+	cp testdata/clustershell.txt $(CLUSTERSHELL)/clustershell.txt
+	cd testdata && $(abspath $(CLUSTERSHELL)/bin/python) clustershell.py
+	@diff -u $(CLUSTERSHELL)/clustershell.txt testdata/clustershell.txt || { echo "ClusterShell answers the corpus differently; testdata/clustershell.txt now holds its answers"; exit 1; }
+
+# A stamp of its own, since bin/python is a link to the system's Python.
+$(CLUSTERSHELL)/installed: testdata/requirements.txt
+	python3 -m venv $(CLUSTERSHELL)
+	$(CLUSTERSHELL)/bin/pip install --quiet --requirement testdata/requirements.txt
+	touch $@
+
 ## fuzz: fuzz the parser for FUZZTIME (90s); a failing input lands in testdata/fuzz/
 .PHONY: fuzz
 fuzz:

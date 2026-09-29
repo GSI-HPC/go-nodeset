@@ -149,6 +149,31 @@ operator with no left operand. On the other lines of the corpus both name the
 same hosts. Folded output may still be ordered differently: ClusterShell prints
 `exe[3,01-02]` where the package prints `exe[01-02,3]`.
 
+Beyond the corpus, a test runs ClusterShell itself over thousands of
+generated expressions ([testing.md](testing.md#what-is-tested-where)). Apart
+from the rows above and two differences in [groups](#groups), both name the
+same hosts for every one of them, and each reads what the other prints as the
+same hosts.
+
+### Folded output of several dimensions
+
+Where every host name has at most one number, the package prints what
+ClusterShell prints, character for character, with autostep or without, and
+`Expand` lists the hosts in ClusterShell's order. With several numbers in a
+name there is more than one way to fold a set, and the two do not always
+choose the same one:
+
+- they may fold one set into different vectors: the package prints
+  `cn[001-032]-ib1,cn[005-032]-ib0` where ClusterShell prints
+  `cn[005-032]-ib[0-1],cn[001-004]-ib1`;
+- they may list the vectors of one pattern in another order: the package
+  orders them by their numbers, ClusterShell by how it built them;
+- `Expand` lists the hosts in numeric order, dimension by dimension from the
+  left, where ClusterShell lists them vector by vector.
+
+Either output parses back into the same set, in the package and in
+ClusterShell.
+
 ## Groups
 
 `@group` and `@source:group` are resolved by a `Resolver` the program
@@ -161,6 +186,17 @@ The expression a resolver returns is parsed in turn, with the same resolver,
 so a group may refer to other groups. Nesting is cut off after sixteen levels,
 which also reports a cycle rather than looping. The hosts of every group an
 expression refers to count towards its [limits](#limits).
+
+Two things differ from ClusterShell here:
+
+- A bare `@group` inside a group is handed to the resolver with an empty
+  source, like any other. ClusterShell looks it up in the source of the group
+  that names it, so a group of source `ib` that refers to `@fabric` means
+  `@ib:fabric` there. A group that means another group of its own source
+  writes the source out.
+- A group the resolver does not know is an error, and so is `@` alone.
+  ClusterShell answers a group its static source does not know with no
+  hosts, so a typing error there selects nothing instead of failing.
 
 ## Rendering for other tools
 

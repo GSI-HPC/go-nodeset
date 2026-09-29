@@ -25,3 +25,6 @@ coverage.html
 
 # Markdown linting
 node_modules/
+
+# The ClusterShell that make clustershell installs
+/.clustershell/

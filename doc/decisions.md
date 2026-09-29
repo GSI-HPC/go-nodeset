@@ -14,6 +14,7 @@ edited: a later one supersedes it, and the earlier one's status names it.
 | [3](#3-the-module-requires-nothing) | The module requires nothing | accepted |
 | [4](#4-a-release-is-a-signed-tag) | A release is a signed tag | accepted |
 | [5](#5-an-engine-of-its-own-rather-than-an-existing-go-library) | An engine of its own rather than an existing Go library | accepted |
+| [6](#6-clustershell-itself-is-the-reference-in-ci) | ClusterShell itself is the reference in CI | accepted |
 
 ## 1. Apache-2.0, and GSI holds the copyright
 
@@ -244,3 +245,63 @@ through purego rather than use a Go one.
   which a user of both tools meets as a set that the two read differently.
   `doc/language.md` lists them.
 - One maintainer releases one more module.
+
+## 6. ClusterShell itself is the reference in CI
+
+Status: accepted
+
+### Context
+
+The package implements ClusterShell's node set language. Until now it was
+held to ClusterShell only through the corpus in `testdata/clustershell.txt`:
+58 expressions written by hand, with the hosts ClusterShell named for each
+recorded once. The corpus test compares the package with those recorded
+hosts, not with ClusterShell, and not with ClusterShell's folded output.
+
+Before v0.1.0 the maintainer asked for CI to install ClusterShell and check
+that the package gives the same output. A first run over 20,000 generated
+expressions found that both name the same hosts for every one of them, and
+that the output differs in these ways:
+
+- folding a set whose names hold several numbers, where there is more than
+  one right answer and the two choose differently;
+- the order in which `Expand` lists such a set;
+- autostep: the package never wrote the last two values of a list as a step,
+  although its documentation promised a step for any n values;
+- a bare `@group` inside a group, an unknown group, and `exe[1-2-3]`.
+
+### Decision
+
+- CI installs the ClusterShell that `testdata/requirements.txt` pins, in a
+  virtual environment, and `TestClusterShellOracle` compares the package
+  with it on the corpus, on expressions both must reject, and on 20,000
+  expressions generated from a fixed seed. The corpus is then recorded again
+  with that ClusterShell and must not change.
+- Both must reject the same expressions and name the same hosts, and each
+  must read what the other prints, the host list included, as the same
+  hosts. Where every host name has at most one number, the folded output
+  and the order of `Expand` must be ClusterShell's, character for character,
+  autostep included.
+- Autostep takes the values from left to right as ClusterShell does. That
+  fixes the step the package left out; folded output without autostep does
+  not change.
+- Folding names with several numbers stays the package's own, and so do the
+  order of `Expand`, the source of a bare nested group, and an unknown group
+  being an error. `doc/language.md` lists these differences, as it lists the
+  corpus's.
+- The Go test uses the standard library, and it is skipped unless
+  `NODESET_CLUSTERSHELL_PYTHON` names a Python with ClusterShell, so `go test`
+  needs nothing but Go and decision 3 holds. Python is a tool CI runs, as
+  `reuse` is.
+
+### Costs
+
+- The CI job needs PyPI: if ClusterShell cannot be installed, the job fails.
+- The pin is raised by hand. A new ClusterShell release goes unnoticed until
+  someone raises it, and raising it means recording the corpus again and
+  listing or fixing whatever differs.
+- A program that compares the package's folded output with ClusterShell's,
+  as text, finds differences where names hold several numbers.
+- The generator keeps out of the known differences, so a difference in a
+  shape it does not generate, such as one host at two widths or whitespace,
+  is caught only by the corpus.

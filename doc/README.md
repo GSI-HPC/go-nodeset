@@ -35,6 +35,10 @@ which pkg.go.dev publishes:
 - The ClusterShell corpus tests check the list of differences in
   `language.md`: a difference that goes away fails them, and so does one
   that the list and the corpus do not both name.
+- CI compares the package with ClusterShell itself
+  ([decision 6](decisions.md#6-clustershell-itself-is-the-reference-in-ci)):
+  a change that makes the two differ fails it, unless `language.md` lists
+  the difference and the test allows it.
 
 Deliberately absent: a documentation site, a changelog, a `CONTRIBUTING.md`
 and a README per package. pkg.go.dev, the signed tags and `AGENTS.md` say

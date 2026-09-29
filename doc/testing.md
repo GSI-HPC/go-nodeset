@@ -41,6 +41,32 @@ names each divergence the corpus test knows, and no other.
 `clustershell.py` next to it records the answers again, with ClusterShell
 installed; the version it used is in the corpus header.
 
+**ClusterShell itself** is the reference in a test that CI runs with the
+ClusterShell `testdata/requirements.txt` pins. `TestClusterShellOracle` hands
+expressions to `testdata/clustershell_oracle.py`, which answers them with
+ClusterShell's `NodeSet`, and compares the answers with the package's:
+
+- the lines of the corpus that name no divergence;
+- expressions both must reject;
+- 20,000 expressions generated from a fixed seed, of one to four terms joined
+  by the four operators: ranges, steps, lists, padding, one to three numbers
+  in a name, domains, nested groups from two sources, and autostep from 2
+  to 4.
+
+Both must reject the same expressions and name the same hosts, and each must
+read what the other prints, the host list included, as the same hosts. Where
+every host name has at most one number, `String` must be ClusterShell's
+folded form and `Expand` must list the hosts in ClusterShell's order. The
+generated expressions stay out of the differences
+[language.md](language.md#where-this-differs-from-clustershell) lists: each
+number of a name has one width in every expression, and a group names another
+with its source. Locally, `make clustershell` sets up ClusterShell in
+`.clustershell/`, runs the test, and records the corpus again, failing if
+ClusterShell's answers have changed.
+`NODESET_CLUSTERSHELL_CASES` and `NODESET_CLUSTERSHELL_SEED` run more
+expressions, or others. The test is skipped where `NODESET_CLUSTERSHELL_PYTHON`
+is not set, so that `go test` needs nothing but Go.
+
 **Size and cost** are tests of their own. One folds sets of a quarter of a
 million hosts, which would take more than a minute if folding were quadratic.
 One lowers the limits to a hundred and checks that every way of exceeding them
