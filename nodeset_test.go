@@ -4,6 +4,7 @@
 package nodeset_test
 
 import (
+	"fmt"
 	"runtime"
 	"slices"
 	"strings"
@@ -286,7 +287,16 @@ func TestGroups(t *testing.T) {
 				"all":     "@compute,@submit",
 				"empty":   "",
 			},
-			"slurm": {"idle": "exe[3-4]"},
+			"slurm": {
+				"idle":    "exe[3-4]",
+				"drained": "exe4",
+				// A bare reference inside a group of a named source means
+				// a group of that source, as it does in ClusterShell.
+				"up":        "@idle!@drained",
+				"local":     "@local:submit,@idle",
+				"elsewhere": "@local:all",
+				"every":     "@local:*",
+			},
 		},
 		Default: "local",
 	}
@@ -303,6 +313,16 @@ func TestGroups(t *testing.T) {
 		{"@compute,login", "exe[1-4],login"},
 		{"@empty", ""},
 		{"@*", "exe[1-4],sub[1-2]"},
+		{"@slurm:up", "exe3"},
+		{"@slurm:local", "exe[3-4],sub[1-2]"},
+		{"@slurm:elsewhere", "exe[1-4],sub[1-2]"},
+		{"@slurm:every", "exe[1-4],sub[1-2]"},
+		// A group the table does not hold names no hosts, as in a static
+		// source of ClusterShell, and so does a reference without a name.
+		{"@missing", ""},
+		{"@slurm:missing,exe9", "exe9"},
+		{"@", ""},
+		{"@local:", ""},
 	}
 	for _, tc := range tests {
 		t.Run(tc.expr, func(t *testing.T) {
@@ -331,12 +351,27 @@ func TestGroupErrors(t *testing.T) {
 	}
 
 	res := nodeset.NewMapResolver("local", map[string]string{"compute": "exe[1-2]"})
-	for _, expr := range []string{"@missing", "@other:compute", "@", "@other:*"} {
+	for _, expr := range []string{"@other:compute", "@other:*"} {
 		if _, err := nodeset.ParseWith(expr, res); err == nil {
 			t.Errorf("ParseWith(%q) should fail", expr)
 		}
 	}
+
+	// A resolver for which an unknown group is an error keeps it one.
+	if _, err := nodeset.ParseWith("exe1,@missing", strictResolver{}); err == nil {
+		t.Error("ParseWith with a resolver that refuses an unknown group should fail")
+	}
 }
+
+// strictResolver refuses every group, as a program does for which a
+// mistyped group must not select nothing.
+type strictResolver struct{}
+
+func (strictResolver) Resolve(_, group string) (string, error) {
+	return "", fmt.Errorf("unknown group %q", group)
+}
+
+func (strictResolver) All(string) (string, error) { return "", nil }
 
 var _ nodeset.Lister = (*nodeset.MapResolver)(nil)
 
