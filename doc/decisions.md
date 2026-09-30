@@ -393,6 +393,8 @@ ClusterShell's order.
 - A set keeps the fold of each pattern until its hosts change. `Expand`
   and `Split` list the hosts from the fold, in ClusterShell's order, without
   sorting them again.
+- A name without brackets is added to the set it is united with directly,
+  without a set of its own.
 - The fold of a set of one number sorts its values once, and the first
   pass of the fold of a set with several numbers sorts its hosts with a
   radix sort.
