@@ -3,13 +3,6 @@
 
 package nodeset
 
-import (
-	"cmp"
-	"maps"
-	"slices"
-	"strings"
-)
-
 // NodeSet is an unordered set of host names that renders in folded form.
 // The zero value is not usable; call New or Parse.
 //
@@ -17,8 +10,11 @@ import (
 // host keeps the spelling it was first given, and when sets are combined the
 // spelling already held wins, so a set never shows a host under a name it was
 // not given.
+//
+// A set may be read from several goroutines at once. Add changes it, and
+// needs the set to itself.
 type NodeSet struct {
-	nodes    map[string]node
+	groups   map[string]*group // by pattern
 	autostep int
 }
 
@@ -35,7 +31,7 @@ func WithAutostep(n int) Option {
 
 // New returns an empty set.
 func New(opts ...Option) *NodeSet {
-	ns := &NodeSet{nodes: make(map[string]node)}
+	ns := &NodeSet{groups: make(map[string]*group)}
 	for _, o := range opts {
 		o(ns)
 	}
@@ -72,15 +68,23 @@ func MustParse(expr string, opts ...Option) *NodeSet {
 }
 
 // Len reports the number of hosts in the set.
-func (ns *NodeSet) Len() int { return len(ns.nodes) }
+func (ns *NodeSet) Len() int {
+	n := 0
+	for _, g := range ns.groups {
+		n += g.len()
+	}
+	return n
+}
 
 // IsEmpty reports whether the set names no host.
-func (ns *NodeSet) IsEmpty() bool { return len(ns.nodes) == 0 }
+func (ns *NodeSet) IsEmpty() bool { return len(ns.groups) == 0 }
 
 // Clone returns an independent copy.
 func (ns *NodeSet) Clone() *NodeSet {
-	out := &NodeSet{nodes: make(map[string]node, len(ns.nodes)), autostep: ns.autostep}
-	maps.Copy(out.nodes, ns.nodes)
+	out := &NodeSet{groups: make(map[string]*group, len(ns.groups)), autostep: ns.autostep}
+	for p, g := range ns.groups {
+		out.groups[p] = g.clone()
+	}
 	return out
 }
 
@@ -90,14 +94,14 @@ func (ns *NodeSet) Add(expr string) error {
 	if err != nil {
 		return err
 	}
-	ns.merge(other)
+	ns.merge(other, true)
 	return nil
 }
 
 // Contains reports whether name is a member. Padding is ignored, so "exe01"
 // and "exe1" name the same host.
 func (ns *NodeSet) Contains(name string) bool {
-	_, ok := ns.lookup(name)
+	_, _, _, ok := ns.lookup(name)
 	return ok
 }
 
@@ -109,25 +113,30 @@ func (ns *NodeSet) Contains(name string) bool {
 // "exe1", because padding is not part of a host's identity and both name one
 // host. A set holding exe0001 and exe11 answers "exe11" for exe11.
 func (ns *NodeSet) Canonical(name string) (string, bool) {
-	n, ok := ns.lookup(name)
+	pattern, vals, pads, ok := ns.lookup(name)
 	if !ok {
 		return "", false
 	}
-	return n.name(), true
+	return string(appendName(nil, pattern, vals, pads)), true
 }
 
-// lookup finds the member a single host name refers to.
-func (ns *NodeSet) lookup(name string) (node, bool) {
-	other, err := parsePattern(name, newBudget())
-	if err != nil || len(other.nodes) != 1 {
-		return node{}, false
+// lookup finds the member a single host name refers to: its pattern, its
+// values, and the widths the set holds them with.
+func (ns *NodeSet) lookup(name string) (string, []int, []int, bool) {
+	one, err := parseProduct(name, newBudget())
+	if err != nil || one.len() != 1 {
+		return "", nil, nil, false
 	}
-	var key string
-	for k := range other.nodes {
-		key = k
+	g, ok := ns.groups[one.pattern]
+	if !ok {
+		return "", nil, nil, false
 	}
-	n, ok := ns.nodes[key]
-	return n, ok
+	vals := make([]int, one.width)
+	for d, rs := range one.dims {
+		vals[d] = rs.values[0]
+	}
+	pads, ok := g.find(vals)
+	return one.pattern, vals, pads, ok
 }
 
 // Expand returns the host names in the order ClusterShell lists them: by
@@ -135,38 +144,15 @@ func (ns *NodeSet) lookup(name string) (node, bool) {
 // one with several, vector by vector as String folds them, each with its last
 // number varying fastest.
 func (ns *NodeSet) Expand() []string {
-	nodes := ns.sorted()
-	out := make([]string, len(nodes))
-	for i, n := range nodes {
-		out[i] = n.name()
+	out := make([]string, 0, ns.Len())
+	var buf []byte
+	for _, p := range sortedPatterns(ns.groups) {
+		ns.groups[p].inOrder(func(vals, pads []int) {
+			buf = appendName(buf[:0], p, vals, pads)
+			out = append(out, string(buf))
+		})
 	}
 	return out
-}
-
-// sorted returns the members in expansion order: by pattern, and within a
-// pattern with one number numerically, within one with several vector by
-// vector as the set folds, as ClusterShell lists them. It sorts one copy of
-// the members, and puts the runs of a pattern with several numbers in order
-// in place.
-func (ns *NodeSet) sorted() []node {
-	nodes := make([]node, 0, len(ns.nodes))
-	for _, n := range ns.nodes {
-		nodes = append(nodes, n)
-	}
-	slices.SortFunc(nodes, func(a, b node) int {
-		return cmp.Or(strings.Compare(a.pattern, b.pattern), slices.Compare(a.vals, b.vals))
-	})
-	for i := 0; i < len(nodes); {
-		j := i + 1
-		for j < len(nodes) && nodes[j].pattern == nodes[i].pattern {
-			j++
-		}
-		if len(nodes[i].vals) > 1 {
-			orderND(nodes[i:j])
-		}
-		i = j
-	}
-	return nodes
 }
 
 // String renders the set in folded form, which Parse reads back as the same
@@ -176,7 +162,7 @@ func (ns *NodeSet) String() string { return ns.fold() }
 // Union returns the hosts in either set.
 func (ns *NodeSet) Union(other *NodeSet) *NodeSet {
 	out := ns.Clone()
-	out.merge(other)
+	out.merge(other, false)
 	return out
 }
 
@@ -197,71 +183,132 @@ func (ns *NodeSet) Difference(other *NodeSet) *NodeSet {
 // SymmetricDifference returns the hosts in exactly one of the two sets.
 func (ns *NodeSet) SymmetricDifference(other *NodeSet) *NodeSet {
 	out := ns.Clone()
-	out.symmetricDifference(other)
+	out.symmetricDifference(other, false)
 	return out
 }
 
 // Split partitions the set into at most n chunks of near equal size, in
 // expansion order. It returns nil for n below one.
 func (ns *NodeSet) Split(n int) []*NodeSet {
-	if n < 1 {
+	total := ns.Len()
+	if n < 1 || total == 0 {
 		return nil
 	}
-	nodes := ns.sorted()
-	if len(nodes) == 0 {
-		return nil
-	}
-	if n > len(nodes) {
-		n = len(nodes)
-	}
+	n = min(n, total)
 	out := make([]*NodeSet, 0, n)
-	size, rest := len(nodes)/n, len(nodes)%n
-	for i := 0; i < n; i++ {
-		take := size
-		if i < rest {
-			take++
-		}
-		chunk := &NodeSet{nodes: make(map[string]node, take), autostep: ns.autostep}
-		for _, m := range nodes[:take] {
-			chunk.nodes[m.key()] = m
-		}
-		nodes = nodes[take:]
-		out = append(out, chunk)
+	size, rest := total/n, total%n
+	var chunk *NodeSet
+	left := 0
+	for _, p := range sortedPatterns(ns.groups) {
+		width := ns.groups[p].width
+		ns.groups[p].inOrder(func(vals, pads []int) {
+			if left == 0 {
+				left = size
+				if len(out) < rest {
+					left++
+				}
+				chunk = &NodeSet{groups: make(map[string]*group), autostep: ns.autostep}
+				out = append(out, chunk)
+			}
+			chunk.listed(p, width).add(vals, pads)
+			left--
+		})
 	}
 	return out
 }
 
+// listed returns the group of a pattern, made or turned into a list of hosts
+// so that hosts can be added to it.
+func (ns *NodeSet) listed(pattern string, width int) *group {
+	g, ok := ns.groups[pattern]
+	if !ok {
+		g = &group{pattern: pattern, width: width, hosts: make(map[string]int)}
+		ns.groups[pattern] = g
+	}
+	g.list()
+	return g
+}
+
 // merge adds the members of other. A host this set already holds keeps the
-// spelling it has.
-func (ns *NodeSet) merge(other *NodeSet) {
-	for k, v := range other.nodes {
-		if _, ok := ns.nodes[k]; !ok {
-			ns.nodes[k] = v
+// spelling it has. With take, the groups of other are taken over rather
+// than copied, and other must not be used again.
+func (ns *NodeSet) merge(other *NodeSet, take bool) {
+	for p, og := range other.groups {
+		g, ok := ns.groups[p]
+		if !ok {
+			if !take {
+				og = og.clone()
+			}
+			ns.groups[p] = og
+			continue
 		}
+		g.list()
+		og.each(g.add)
 	}
 }
 
 func (ns *NodeSet) subtract(other *NodeSet) {
-	for k := range other.nodes {
-		delete(ns.nodes, k)
+	for p, og := range other.groups {
+		g, ok := ns.groups[p]
+		if !ok {
+			continue
+		}
+		g.list()
+		if og.len() < len(g.hosts) {
+			og.each(func(vals, _ []int) { g.remove(vals) })
+		} else {
+			g.keep(func(vals []int) bool { return !og.has(vals) })
+		}
+		ns.dropEmpty(p)
 	}
 }
 
 func (ns *NodeSet) intersect(other *NodeSet) {
-	for k := range ns.nodes {
-		if _, ok := other.nodes[k]; !ok {
-			delete(ns.nodes, k)
+	for p, g := range ns.groups {
+		og, ok := other.groups[p]
+		switch {
+		case !ok:
+			delete(ns.groups, p)
+			continue
+		case g.hosts == nil && og.hosts == nil:
+			ns.groups[p] = g.intersectProduct(og)
+		default:
+			g.list()
+			g.keep(og.has)
 		}
+		ns.dropEmpty(p)
 	}
 }
 
-func (ns *NodeSet) symmetricDifference(other *NodeSet) {
-	for k, v := range other.nodes {
-		if _, ok := ns.nodes[k]; ok {
-			delete(ns.nodes, k)
-		} else {
-			ns.nodes[k] = v
+// symmetricDifference toggles the members of other. With take, the groups
+// of other are taken over rather than copied, as merge does.
+func (ns *NodeSet) symmetricDifference(other *NodeSet, take bool) {
+	for p, og := range other.groups {
+		g, ok := ns.groups[p]
+		if !ok {
+			if !take {
+				og = og.clone()
+			}
+			ns.groups[p] = og
+			continue
 		}
+		g.list()
+		og.each(func(vals, pads []int) {
+			if g.has(vals) {
+				g.remove(vals)
+			} else {
+				g.add(vals, pads)
+			}
+		})
+		ns.dropEmpty(p)
+	}
+}
+
+// dropEmpty removes the group of a pattern if it holds no host, so that a
+// set holds a group only for a pattern it has hosts of.
+func (ns *NodeSet) dropEmpty(pattern string) {
+	if ns.groups[pattern].len() == 0 {
+		delete(ns.groups, pattern)
 	}
 }
 
@@ -274,11 +321,14 @@ func (ns *NodeSet) symmetricDifference(other *NodeSet) {
 // read several bracketed dimensions in one name as well, but this form is the
 // one every version of them reads.
 func (ns *NodeSet) Hostlist() string {
-	var parts []string
-	for _, p := range ns.byPattern() {
-		for _, v := range foldOneAxis(p.pattern, p.nodes) {
-			parts = append(parts, v.render(0))
+	var buf []byte
+	for _, p := range sortedPatterns(ns.groups) {
+		for _, v := range foldOneAxis(p, ns.groups[p].nodes()) {
+			if len(buf) > 0 {
+				buf = append(buf, ',')
+			}
+			buf = v.appendTo(buf, 0)
 		}
 	}
-	return strings.Join(parts, ",")
+	return string(buf)
 }
