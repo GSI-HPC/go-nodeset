@@ -105,6 +105,67 @@ func (rs *rangeSet) sortUnique() {
 	rs.values, rs.pads = values, pads
 }
 
+// combine walks two sets in order and keeps the values that only rs holds,
+// that only o holds, or that both hold, as the three flags say. A value keeps
+// the width it has in the set it comes from, and in rs when both hold it.
+func (rs *rangeSet) combine(o *rangeSet, onlyRS, onlyO, both bool) *rangeSet {
+	size := 0
+	if onlyRS || both {
+		size += len(rs.values)
+	}
+	if onlyO {
+		size += len(o.values)
+	}
+	out := &rangeSet{values: make([]int, 0, size), pads: make([]int, 0, size)}
+	keep := func(from *rangeSet, i int) {
+		out.values = append(out.values, from.values[i])
+		out.pads = append(out.pads, from.pads[i])
+	}
+	i, j := 0, 0
+	for i < len(rs.values) || j < len(o.values) {
+		switch {
+		case j == len(o.values) || i < len(rs.values) && rs.values[i] < o.values[j]:
+			if onlyRS {
+				keep(rs, i)
+			}
+			i++
+		case i == len(rs.values) || o.values[j] < rs.values[i]:
+			if onlyO {
+				keep(o, j)
+			}
+			j++
+		default:
+			if both {
+				keep(rs, i)
+			}
+			i, j = i+1, j+1
+		}
+	}
+	return out
+}
+
+// overlap reports whether rs holds a value o does not, and whether the two
+// share a value.
+func (rs *rangeSet) overlap(o *rangeSet) (beyond, shared bool) {
+	j := 0
+	for _, v := range rs.values {
+		for j < len(o.values) && o.values[j] < v {
+			j++
+		}
+		if j < len(o.values) && o.values[j] == v {
+			shared = true
+		} else {
+			beyond = true
+		}
+	}
+	return beyond, shared
+}
+
+// equal reports whether two sets hold the same values, spelled alike.
+func (rs *rangeSet) equal(o *rangeSet) bool {
+	return slices.Equal(rs.values, o.values) && slices.Equal(rs.pads, o.pads)
+}
+
 // span is one part of a bracket expression, "1-10/2", before it is expanded.
 type span struct {
 	start, end, step, pad int

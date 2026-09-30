@@ -61,6 +61,28 @@ func TestParseExpand(t *testing.T) {
 		{"exe[1-3]!sub1", []string{"exe1", "exe2", "exe3"}},
 		{"exe[1-3]!exe[0-10]", nil},
 		{"r[1-2]n[1-2]&r[2-3]n[3-4]", nil},
+		// Two products of one pattern combine range by range when the
+		// result is a product again, and are listed host by host when it
+		// is not.
+		{"exe[1-3],exe[01-02]", []string{"exe1", "exe2", "exe3"}},
+		{"exe[1-3]^exe[01-03]", nil},
+		{"exe[1-2],exe[04-05]", []string{"exe1", "exe2", "exe04", "exe05"}},
+		{"r[1-2]n[1-2],r[3]n[1-2]", []string{"r1n1", "r1n2", "r2n1", "r2n2", "r3n1", "r3n2"}},
+		{"r[1-2]n[1-2],r3n3", []string{"r1n1", "r1n2", "r2n1", "r2n2", "r3n3"}},
+		{"r[1-2]n[1-2]!r[3-4]n[1-2]", []string{"r1n1", "r1n2", "r2n1", "r2n2"}},
+		{"r[1-2]n[1-2]!r[1-2]n[1-5]", nil},
+		{"r[1-3]n[1-2]!r2n[1-2]", []string{"r1n1", "r1n2", "r3n1", "r3n2"}},
+		{"r[1-2]n[1-2]!r1n1", []string{"r2n1", "r2n2", "r1n2"}},
+		{"r[1-2]n[1-2]&r[2-3]n[2-3]", []string{"r2n2"}},
+		{"r[1-2]n[1-2]^r[1-2]n[1-2]", nil},
+		{"r[1-2]n[1-2]^r[1-2]n[2-3]", []string{"r1n1", "r1n3", "r2n1", "r2n3"}},
+		{"r[1-2]n[1-2]^r[2-3]n[2-3]", []string{"r1n1", "r1n2", "r2n1", "r2n3", "r3n2", "r3n3"}},
+		{"login^login", nil},
+		// Listed hosts combine with a product host by host.
+		{"exe1,exe5!exe[1-3]", []string{"exe5"}},
+		{"exe1,exe2,exe3!exe2", []string{"exe1", "exe3"}},
+		{"exe1,exe2&exe2", []string{"exe2"}},
+		{"exe1,exe2^exe[2-3]", []string{"exe1", "exe3"}},
 		// A name without numbers is one host however often it is named.
 		{"login,login", []string{"login"}},
 		{"login login&login", []string{"login"}},

@@ -16,7 +16,8 @@ edited: a later one supersedes it, and the earlier one's status names it.
 | [5](#5-an-engine-of-its-own-rather-than-an-existing-go-library) | An engine of its own rather than an existing Go library | accepted |
 | [6](#6-clustershell-itself-is-the-reference-in-ci) | ClusterShell itself is the reference in CI | accepted, in part superseded by [7](#7-the-package-prints-what-clustershell-prints) |
 | [7](#7-the-package-prints-what-clustershell-prints) | The package prints what ClusterShell prints | accepted, in part superseded by [8](#8-a-set-keeps-its-ranges-and-its-fold) |
-| [8](#8-a-set-keeps-its-ranges-and-its-fold) | A set keeps its ranges and its fold | accepted |
+| [8](#8-a-set-keeps-its-ranges-and-its-fold) | A set keeps its ranges and its fold | accepted, extended by [9](#9-operators-combine-ranges-where-the-result-is-ranges) |
+| [9](#9-operators-combine-ranges-where-the-result-is-ranges) | Operators combine ranges where the result is ranges | accepted |
 
 ## 1. Apache-2.0, and GSI holds the copyright
 
@@ -369,7 +370,8 @@ than naming hosts with negative numbers, as ClusterShell reads it.
 
 ## 8. A set keeps its ranges and its fold
 
-Status: accepted
+Status: accepted, extended by
+[decision 9](#9-operators-combine-ranges-where-the-result-is-ranges)
 
 ### Context
 
@@ -409,3 +411,42 @@ ClusterShell's order.
 - A set that is read keeps its fold, which for a listed set of one number
   is a second copy of its values.
 - A set has two forms of storage, and the operators handle both.
+
+## 9. Operators combine ranges where the result is ranges
+
+Status: accepted
+
+### Context
+
+Decision 8 kept a bracketed name as the product of its ranges, but any
+operator other than an intersection listed the hosts of both operands one
+by one. `exe[1-1000000]!exe5` took a second, and
+`r[1-1000]n[1-1000]!r[1-10]n[1-1000]` too, where ClusterShell answered the
+second in milliseconds. ClusterShell keeps a set of names with several
+numbers as a list of vectors and combines them vector by vector, but folds
+a result with holes host by host all the same.
+
+### Decision
+
+- Two products of one pattern combine range by range when the result is a
+  product again: a union when one holds the other or the two differ in one
+  dimension, spellings included; a difference when they share no host or
+  the first holds values outside the second in one dimension only; an
+  intersection always; a symmetric difference when they differ in one
+  dimension at most. Every other combination lists the hosts, as before.
+- A result is folded and listed from its hosts as before, so a product
+  prints and lists as the same hosts listed one by one do.
+- A dimension stays one sorted slice of values. Keeping it as runs would
+  make `exe[1-1000000]` cost less than its 16 MiB, but every fold, list
+  and lookup would change with it, for no case the budget allows to cost
+  more than a few tens of milliseconds.
+- Operators on lists of vectors, as ClusterShell has them, are not taken
+  up: a result with holes is folded from its hosts in ClusterShell as
+  well.
+
+### Costs
+
+- Each operator has a second path, for two products, which the operators
+  on listed hosts check against in the tests.
+- A result with holes still lists the hosts of its pattern, and the fold
+  of a million of them takes about two seconds.
