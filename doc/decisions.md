@@ -436,6 +436,7 @@ a result with holes host by host all the same.
   dimension at most. Every other combination lists the hosts, as before.
 - A result is folded and listed from its hosts as before, so a product
   prints and lists as the same hosts listed one by one do.
+- `Hostlist` writes a product from its ranges, without listing its hosts.
 - A dimension stays one sorted slice of values. Keeping it as runs would
   make `exe[1-1000000]` cost less than its 16 MiB, but every fold, list
   and lookup would change with it, for no case the budget allows to cost

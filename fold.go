@@ -142,22 +142,54 @@ func unitVectors(pattern string, nodes []node) []vector {
 	return vectors
 }
 
-// foldOneAxis merges the hosts of one pattern along a single dimension, the
-// one that leaves the fewest vectors, so every vector has at most one
-// dimension with more than one value. A tie goes to the later dimension, which
-// is the one that usually counts nodes. Steps are never used.
-func foldOneAxis(pattern string, nodes []node) []vector {
-	var best []vector
-	if len(nodes) > 0 {
-		for axis := range nodes[0].vals {
-			merged := foldAxis(unitVectors(pattern, nodes), axis)
-			if best == nil || len(merged) <= len(best) {
-				best = merged
+// hostlist folds the group as Hostlist writes it, as foldOneAxis folds its
+// hosts. A product is not listed for it: foldOneAxis would unite the values
+// of the dimension with the most values, the later of two with as many, and
+// give a vector for each value of the others, in numeric order.
+func (g *group) hostlist() []vector {
+	if g.listed() {
+		return foldOneAxis(g.pattern, g.nodes())
+	}
+	axis := 0
+	for d, rs := range g.dims {
+		if len(rs.values) >= len(g.dims[axis].values) {
+			axis = d
+		}
+	}
+	var out []vector
+	dims := make([]*rangeSet, g.width)
+	var rec func(d int)
+	rec = func(d int) {
+		switch d {
+		case g.width:
+			out = append(out, vector{pattern: g.pattern, dims: slices.Clone(dims)})
+		case axis:
+			dims[d] = g.dims[d]
+			rec(d + 1)
+		default:
+			rs := g.dims[d]
+			for i := range rs.values {
+				dims[d] = &rangeSet{values: rs.values[i : i+1 : i+1], pads: rs.pads[i : i+1 : i+1]}
+				rec(d + 1)
 			}
 		}
 	}
-	if best == nil {
-		best = unitVectors(pattern, nodes)
+	rec(0)
+	return out
+}
+
+// foldOneAxis merges the listed hosts of one pattern along a single
+// dimension, the one that leaves the fewest vectors, so every vector has at
+// most one dimension with more than one value. A tie goes to the later
+// dimension, which is the one that usually counts nodes. Steps are never
+// used.
+func foldOneAxis(pattern string, nodes []node) []vector {
+	var best []vector
+	for axis := range nodes[0].vals {
+		merged := foldAxis(unitVectors(pattern, nodes), axis)
+		if best == nil || len(merged) <= len(best) {
+			best = merged
+		}
 	}
 	sortVectors(best)
 	return best
