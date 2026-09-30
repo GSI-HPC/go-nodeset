@@ -144,7 +144,7 @@ func TestFoldNDMatchesReference(t *testing.T) {
 			points = append(points, p)
 		}
 
-		sp, boxes := foldND(nodes)
+		sp, boxes, _ := foldND(nodes)
 		got := make([][][]string, len(boxes))
 		for i, b := range boxes {
 			got[i] = make([][]string, len(b.dims))
