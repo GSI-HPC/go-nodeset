@@ -213,16 +213,21 @@ is bounded as well as its result: `a[1-600000]!a[1-600000],b1` is refused too.
 Each dimension of a name is weighed before it is expanded, against what the
 dimensions before it and the terms before it have left, so an oversized
 expression is refused before its memory is spent. A typo such as
-`exe[1-100000000]` is reported rather than exhausting memory. The most an
-expression can cost is the largest set it may name, about 260 MiB of
-allocation and a second of time for 2²⁰ hosts.
+`exe[1-100000000]` is reported rather than exhausting memory. A bracketed
+name is kept as its ranges, and its hosts are listed one by one only when an
+operator combines it with other hosts of the same pattern, so the caps count
+hosts named, not memory spent. The most an expression can cost is the largest
+set it may list, about 130 MiB of allocation and half a second of time for
+2²⁰ hosts.
 
 Bounds and steps are plain decimal numbers of at most eighteen digits, so no
 arithmetic on them can overflow.
 
-Folding a set of one number costs O(n log n) in the number of hosts. A set
-with several numbers in its names is folded in passes, each of which costs
-about O(n log n); ClusterShell compares every pair of vectors in some of them,
-and the package finds the same pairs through an index instead. Parsing and
-printing a set of a million hosts, the most an expression may name, takes a
-few seconds.
+A set keeps its fold until it changes, and `Expand` lists the hosts from
+it. A bracketed name folds and lists in time proportional to its ranges and
+its hosts, without sorting. Folding a listed set of one number costs
+O(n log n) in the number of hosts. A listed set with several numbers in its
+names is folded in passes, each of which costs about O(n log n); ClusterShell
+compares every pair of vectors in some of them, and the package finds the
+same pairs through an index instead. Parsing and printing a listed set of a
+million hosts, the most an expression may name, takes about a second.

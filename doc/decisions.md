@@ -15,7 +15,8 @@ edited: a later one supersedes it, and the earlier one's status names it.
 | [4](#4-a-release-is-a-signed-tag) | A release is a signed tag | accepted |
 | [5](#5-an-engine-of-its-own-rather-than-an-existing-go-library) | An engine of its own rather than an existing Go library | accepted |
 | [6](#6-clustershell-itself-is-the-reference-in-ci) | ClusterShell itself is the reference in CI | accepted, in part superseded by [7](#7-the-package-prints-what-clustershell-prints) |
-| [7](#7-the-package-prints-what-clustershell-prints) | The package prints what ClusterShell prints | accepted |
+| [7](#7-the-package-prints-what-clustershell-prints) | The package prints what ClusterShell prints | accepted, in part superseded by [8](#8-a-set-keeps-its-ranges-and-its-fold) |
+| [8](#8-a-set-keeps-its-ranges-and-its-fold) | A set keeps its ranges and its fold | accepted |
 
 ## 1. Apache-2.0, and GSI holds the copyright
 
@@ -310,7 +311,8 @@ that the output differs in these ways:
 
 ## 7. The package prints what ClusterShell prints
 
-Status: accepted
+Status: accepted, in part superseded by
+[decision 8](#8-a-set-keeps-its-ranges-and-its-fold)
 
 ### Context
 
@@ -364,3 +366,44 @@ than naming hosts with negative numbers, as ClusterShell reads it.
   they are code of their own to keep right.
 - A program that relied on `MapResolver` to refuse a mistyped group now
   selects nothing instead, unless it supplies a resolver of its own.
+
+## 8. A set keeps its ranges and its fold
+
+Status: accepted
+
+### Context
+
+A set held every host in one map, keyed by a string of its name, so
+`r[1-1000]n[1-1000]` built a million entries before anything could be done
+with it. ClusterShell keeps the ranges, and folded and listed that set in
+milliseconds where the package took seconds. Every call of `String`,
+`Hostlist` and `Expand` also grouped and sorted the hosts again, and
+`Expand` folded a set with several numbers again to list it in
+ClusterShell's order.
+
+### Decision
+
+- A set holds its hosts by pattern. The hosts of a pattern are either the
+  product of the ranges a bracketed name gives, which is never listed host
+  by host, or listed in a map keyed by their values. A product is listed
+  only when an operator combines it with other hosts of its pattern, and
+  two products are intersected range by range.
+- The budget still counts the hosts a term names, whether or not they are
+  listed.
+- A set keeps the fold of each pattern until its hosts change. `Expand`
+  and `Split` list the hosts from the fold, in ClusterShell's order, without
+  sorting them again.
+- The fold of a set of one number sorts its values once, and the first
+  pass of the fold of a set with several numbers sorts its hosts with a
+  radix sort.
+- A set may be read from several goroutines at once: the fold is stored
+  atomically, and two readers that fold at the same time store the same
+  fold.
+
+### Costs
+
+- The output is unchanged; the ClusterShell comparison, the corpus and the
+  tests check it.
+- A set that is read keeps its fold, which for a listed set of one number
+  is a second copy of its values.
+- A set has two forms of storage, and the operators handle both.

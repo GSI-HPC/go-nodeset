@@ -24,10 +24,12 @@ release (see Compatibility).
   operations.
 - `parse.go`: the expression parser, its operators and the budget that
   caps what an expression may name.
+- `group.go`: the hosts of a set that share a pattern, kept as a product
+  of ranges or listed one by one.
 - `rangeset.go`: bracketed ranges, their steps and padding.
-- `fold.go`: folding into `String()` and `Hostlist()`; `foldnd.go`: folding
-  names with several numbers as ClusterShell does, and the order `Expand`
-  lists them in.
+- `fold.go`: folding into `String()` and `Hostlist()`, the fold a set keeps,
+  and the order `Expand` lists hosts in; `foldnd.go`: folding names with
+  several numbers as ClusterShell does.
 - `resolver.go`: `Resolver`, the optional `Lister`, and `MapResolver`.
 - `*_test.go`: unit tests (`nodeset_test.go`), the ClusterShell corpus
   (`clustershell_test.go`), `FuzzParseFold` (`fuzz_test.go`), the examples

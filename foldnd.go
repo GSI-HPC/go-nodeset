@@ -390,9 +390,8 @@ func fullPass(boxes []box) ([]box, bool) {
 }
 
 // foldND folds the hosts of a pattern with several dimensions into boxes, in
-// the order ClusterShell writes them. It returns the hosts as ranks too, as
-// newSpace gives them.
-func foldND(nodes []node) (*ndSpace, []box, []int) {
+// the order ClusterShell writes them.
+func foldND(nodes []node) (*ndSpace, []box) {
 	sp, ranks := newSpace(nodes)
 	product := make([][]int, len(sp.coords))
 	n := 1
@@ -407,7 +406,7 @@ func foldND(nodes []node) (*ndSpace, []box, []int) {
 		}
 	}
 	if n == len(nodes) {
-		return sp, []box{newBox(product)}, ranks
+		return sp, []box{newBox(product)}
 	}
 	// One box per host, its dimensions sliced from the host's ranks, and
 	// every box's list of dimensions sliced from one slice.
@@ -421,14 +420,12 @@ func foldND(nodes []node) (*ndSpace, []box, []int) {
 		}
 		boxes[i] = box{dims: dims[i*dimCount : (i+1)*dimCount : (i+1)*dimCount], size: 1}
 	}
-	return sp, sp.mergePasses(boxes), ranks
+	return sp, sp.mergePasses(boxes)
 }
 
-// foldVectors folds the hosts of a pattern with several dimensions into
-// vectors to render, each dimension in numeric order, as one of a single
-// number is, so that a range never mixes widths.
-func foldVectors(pattern string, nodes []node) []vector {
-	sp, boxes, _ := foldND(nodes)
+// vectors turns boxes into vectors to render, each dimension in numeric
+// order, as one of a single number is, so that a range never mixes widths.
+func (sp *ndSpace) vectors(pattern string, boxes []box) []vector {
 	out := make([]vector, len(boxes))
 	for i, b := range boxes {
 		dims := make([]*rangeSet, len(b.dims))
@@ -438,10 +435,9 @@ func foldVectors(pattern string, nodes []node) []vector {
 				values[k] = sp.coords[d][r]
 			}
 			slices.SortStableFunc(values, func(x, y coord) int { return cmp.Compare(x.val, y.val) })
-			rs := &rangeSet{}
-			for _, c := range values {
-				rs.values = append(rs.values, c.val)
-				rs.pads = append(rs.pads, c.pad)
+			rs := &rangeSet{values: make([]int, len(values)), pads: make([]int, len(values))}
+			for k, c := range values {
+				rs.values[k], rs.pads[k] = c.val, c.pad
 			}
 			dims[d] = rs
 		}
@@ -450,33 +446,22 @@ func foldVectors(pattern string, nodes []node) []vector {
 	return out
 }
 
-// orderND puts the hosts of a pattern with several dimensions, in place, in
-// the order ClusterShell lists them: box by box as foldND gives the boxes,
-// each box with its last dimension varying fastest. Each host is found by a
-// binary search over the hosts sorted by their ranks, so the order costs
-// two slices of indexes and no strings.
-func orderND(nodes []node) {
-	_, boxes, ranks := foldND(nodes)
-	dimCount := len(nodes[0].vals)
-	of := func(i int) []int { return ranks[i*dimCount : (i+1)*dimCount] }
-	byRank := make([]int, len(nodes))
-	for i := range byRank {
-		byRank[i] = i
-	}
-	slices.SortFunc(byRank, func(a, b int) int { return slices.Compare(of(a), of(b)) })
-
-	// from[k] is the host that goes to place k.
-	from := make([]int, 0, len(nodes))
-	tuple := make([]int, dimCount)
+// eachHost calls f for every host of the boxes, box by box, each with its
+// last dimension varying fastest, as ClusterShell lists them. The slices are
+// valid only during the call.
+func (sp *ndSpace) eachHost(boxes []box, f func(vals, pads []int)) {
+	dimCount := len(sp.coords)
+	vals := make([]int, dimCount)
+	pads := make([]int, dimCount)
 	idx := make([]int, dimCount)
 	for _, b := range boxes {
 		clear(idx)
 		for {
 			for d, i := range idx {
-				tuple[d] = b.dims[d][i]
+				c := sp.coords[d][b.dims[d][i]]
+				vals[d], pads[d] = c.val, c.pad
 			}
-			k, _ := slices.BinarySearchFunc(byRank, tuple, func(i int, t []int) int { return slices.Compare(of(i), t) })
-			from = append(from, byRank[k])
+			f(vals, pads)
 			d := dimCount - 1
 			for ; d >= 0; d-- {
 				if idx[d]++; idx[d] < len(b.dims[d]) {
@@ -487,23 +472,6 @@ func orderND(nodes []node) {
 			if d < 0 {
 				break
 			}
-		}
-	}
-
-	// Move the hosts along the cycles of the permutation.
-	for start := range from {
-		if from[start] < 0 {
-			continue
-		}
-		held, k := nodes[start], start
-		for {
-			next := from[k]
-			from[k] = -1
-			if next == start {
-				nodes[k] = held
-				break
-			}
-			nodes[k], k = nodes[next], next
 		}
 	}
 }

@@ -125,17 +125,18 @@ func TestFoldNDMatchesReference(t *testing.T) {
 		var nodes []node
 		var points [][]string
 		for range count {
-			n := node{pattern: "p", vals: make([]int, dims), pads: make([]int, dims)}
+			n := node{vals: make([]int, dims), pads: make([]int, dims)}
 			for d := range n.vals {
 				n.vals[d] = rng.IntN(side) * (1 + rng.IntN(3)) * 7
 				if rng.IntN(8) == 0 {
 					n.pads[d] = normalPad(n.vals[d], 3)
 				}
 			}
-			if seen[n.key()] {
+			k := fmt.Sprint(n.vals)
+			if seen[k] {
 				continue
 			}
-			seen[n.key()] = true
+			seen[k] = true
 			nodes = append(nodes, n)
 			p := make([]string, dims)
 			for d := range p {
@@ -144,7 +145,7 @@ func TestFoldNDMatchesReference(t *testing.T) {
 			points = append(points, p)
 		}
 
-		sp, boxes, _ := foldND(nodes)
+		sp, boxes := foldND(nodes)
 		got := make([][][]string, len(boxes))
 		for i, b := range boxes {
 			got[i] = make([][]string, len(b.dims))

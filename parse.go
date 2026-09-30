@@ -5,7 +5,6 @@ package nodeset
 
 import (
 	"fmt"
-	"strconv"
 	"strings"
 )
 
@@ -29,36 +28,13 @@ type budget struct{ left int }
 
 func newBudget() *budget { return &budget{left: maxSetElements} }
 
-// node is one host: a pattern with a %s for each numeric dimension, the value
-// of each dimension, and the width each value was written with. The widths
-// are not part of the host's identity: exe1 and exe01 have one key.
-type node struct {
-	pattern string
-	vals    []int
-	pads    []int
-}
-
-// key identifies the host inside a NodeSet.
-func (n node) key() string {
-	var b strings.Builder
-	b.WriteString(n.pattern)
-	for _, v := range n.vals {
-		b.WriteByte(0)
-		b.WriteString(strconv.Itoa(v))
+// exceeded reports that the hosts a term names do not fit in what is left
+// of the budget.
+func (b *budget) exceeded(term string) error {
+	if b.left < maxSetElements {
+		return fmt.Errorf("at %q: the expression's terms name more than %d hosts together", term, maxSetElements)
 	}
-	return b.String()
-}
-
-// name renders the host name as it was written.
-func (n node) name() string {
-	if len(n.vals) == 0 {
-		return strings.ReplaceAll(n.pattern, "%%", "%")
-	}
-	args := make([]any, len(n.vals))
-	for i, v := range n.vals {
-		args[i] = format(v, n.pads[i])
-	}
-	return fmt.Sprintf(n.pattern, args...)
+	return fmt.Errorf("%q expands to more than %d hosts", term, maxSetElements)
 }
 
 type operator byte
@@ -169,6 +145,7 @@ func missingOperand(expr string, op operator, side string) error {
 	return fmt.Errorf("in %q: the %c operator has no %s operand", expr, op, side)
 }
 
+// apply combines src into dst. src is used up.
 func apply(dst *NodeSet, op operator, src *NodeSet) {
 	switch op {
 	case opDifference:
@@ -176,9 +153,9 @@ func apply(dst *NodeSet, op operator, src *NodeSet) {
 	case opIntersection:
 		dst.intersect(src)
 	case opSymmetric:
-		dst.symmetricDifference(src)
+		dst.symmetricDifference(src, true)
 	default:
-		dst.merge(src)
+		dst.merge(src, true)
 	}
 }
 
@@ -190,11 +167,20 @@ func parseTerm(term string, res Resolver, depth int, b *budget) (*NodeSet, error
 	return parsePattern(term, b)
 }
 
-// parsePattern turns one node pattern into the hosts it names, charging them
-// to b. Every dimension is weighed before it is expanded, against what the
-// dimensions before it leave of the budget, so an oversized pattern is
-// refused before its memory is spent.
+// parsePattern turns one node pattern into the set of the hosts it names.
 func parsePattern(term string, b *budget) (*NodeSet, error) {
+	g, err := parseProduct(term, b)
+	if err != nil {
+		return nil, err
+	}
+	return &NodeSet{groups: map[string]*group{g.pattern: g}}, nil
+}
+
+// parseProduct turns one node pattern into the product of its ranges,
+// charging the hosts it names to b. Every dimension is weighed before it is
+// expanded, against what the dimensions before it leave of the budget, so an
+// oversized pattern is refused before its memory is spent.
+func parseProduct(term string, b *budget) (*group, error) {
 	// A host name never begins with a dash, and a name that does is read as
 	// an option by ssh and most other tools a name is handed to.
 	if strings.HasPrefix(term, "-") {
@@ -210,12 +196,6 @@ func parsePattern(term string, b *budget) (*NodeSet, error) {
 		// total is the number of hosts the dimensions read so far name.
 		total = 1
 	)
-	tooMany := func() error {
-		if b.left < maxSetElements {
-			return fmt.Errorf("at %q: the expression's terms name more than %d hosts together", term, maxSetElements)
-		}
-		return fmt.Errorf("%q expands to more than %d hosts", term, maxSetElements)
-	}
 	for i := 0; i < len(term); {
 		c := term[i]
 		numeric := c == '[' || (c >= '0' && c <= '9')
@@ -235,7 +215,7 @@ func parsePattern(term string, b *budget) (*NodeSet, error) {
 				return nil, fmt.Errorf("in %q: %w", term, err)
 			}
 			if count > b.left/total {
-				return nil, tooMany()
+				return nil, b.exceeded(term)
 			}
 			total *= count
 			dims = append(dims, expandSpans(spans, count))
@@ -270,34 +250,9 @@ func parsePattern(term string, b *budget) (*NodeSet, error) {
 		return nil, fmt.Errorf("empty node name")
 	}
 	if total > b.left {
-		return nil, tooMany()
+		return nil, b.exceeded(term)
 	}
 	b.left -= total
 
-	ns := &NodeSet{nodes: make(map[string]node, total)}
-	pat := pattern.String()
-	width := len(dims)
-	vals := make([]int, width)
-	pads := make([]int, width)
-	// The hosts share two backing arrays rather than holding two small
-	// slices each, which halves what a large set costs.
-	allVals := make([]int, 0, total*width)
-	allPads := make([]int, 0, total*width)
-	var walk func(int)
-	walk = func(d int) {
-		if d == len(dims) {
-			allVals = append(allVals, vals...)
-			allPads = append(allPads, pads...)
-			end := len(allVals)
-			n := node{pattern: pat, vals: allVals[end-width : end : end], pads: allPads[end-width : end : end]}
-			ns.nodes[n.key()] = n
-			return
-		}
-		for i, v := range dims[d].values {
-			vals[d], pads[d] = v, dims[d].pads[i]
-			walk(d + 1)
-		}
-	}
-	walk(0)
-	return ns, nil
+	return newProduct(pattern.String(), dims), nil
 }

@@ -8,6 +8,7 @@ import (
 	"runtime"
 	"slices"
 	"strings"
+	"sync"
 	"testing"
 
 	"github.com/GSI-HPC/go-nodeset"
@@ -55,6 +56,15 @@ func TestParseExpand(t *testing.T) {
 		{"exe[001-010]", []string{"exe001", "exe002", "exe003", "exe004", "exe005", "exe006", "exe007", "exe008", "exe009", "exe010"}},
 		{"exe[08-10]!exe09", []string{"exe08", "exe10"}},
 		{"exe1 & exe[1-2]", []string{"exe1"}},
+		{"exe1^sub1", []string{"exe1", "sub1"}},
+		{"exe[1-3],sub1&exe2", []string{"exe2"}},
+		{"exe[1-3]!sub1", []string{"exe1", "exe2", "exe3"}},
+		{"exe[1-3]!exe[0-10]", nil},
+		{"r[1-2]n[1-2]&r[2-3]n[3-4]", nil},
+		// A name without numbers is one host however often it is named.
+		{"login,login", []string{"login"}},
+		{"login login&login", []string{"login"}},
+		{"login,login^login", nil},
 		{"exe[1-3],,exe5,", []string{"exe1", "exe2", "exe3", "exe5"}},
 		// A percent sign is an ordinary character of a name.
 		{"a%b", []string{"a%b"}},
@@ -175,11 +185,16 @@ func TestFoldLargeSets(t *testing.T) {
 		}
 	})
 
-	for _, expr := range []string{"exe[1-262144]", "rack[1-256]-exe[1-256]"} {
-		t.Run(expr, func(t *testing.T) {
+	// A host named again lists the hosts of a bracketed name one by one,
+	// and the fold has to find the ranges again.
+	for _, tc := range []struct{ expr, again string }{
+		{"exe[1-262144]", "exe1"},
+		{"rack[1-256]-exe[1-256]", "rack1-exe1"},
+	} {
+		t.Run(tc.expr, func(t *testing.T) {
 			t.Parallel()
-			if got := nodeset.MustParse(expr).String(); got != expr {
-				t.Errorf("String() = %.60q, want %q", got, expr)
+			if got := nodeset.MustParse(tc.expr + "," + tc.again).String(); got != tc.expr {
+				t.Errorf("String() = %.60q, want %q", got, tc.expr)
 			}
 		})
 	}
@@ -265,6 +280,32 @@ func TestSetOperations(t *testing.T) {
 		})
 	}
 	if got, want := a.String(), "exe[1-5]"; got != want {
+		t.Errorf("the operands were modified: %q, want %q", got, want)
+	}
+
+	// Hosts of patterns only one operand holds.
+	c := nodeset.MustParse("sub[1-2],exe3")
+	mixed := []struct {
+		name string
+		got  *nodeset.NodeSet
+		want string
+	}{
+		{"union", a.Union(c), "exe[1-5],sub[1-2]"},
+		{"intersection", nodeset.MustParse("exe[1-5],login").Intersection(b), "exe[4-5]"},
+		{"difference", a.Difference(nodeset.MustParse("sub1,exe9")), "exe[1-5]"},
+		{"symmetric difference", a.SymmetricDifference(c), "exe[1-2,4-5],sub[1-2]"},
+	}
+	for _, tc := range mixed {
+		if got := tc.got.String(); got != tc.want {
+			t.Errorf("%s with another pattern = %q, want %q", tc.name, got, tc.want)
+		}
+		// The result is a set of its own: changing it leaves the operands
+		// as they were.
+		if err := tc.got.Add("sub3"); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if got, want := c.String(), "exe3,sub[1-2]"; got != want {
 		t.Errorf("the operands were modified: %q, want %q", got, want)
 	}
 }
@@ -414,7 +455,7 @@ func TestParseErrors(t *testing.T) {
 		"exe[1-100000000]",
 		// A number is at most eighteen digits long, written bare or in
 		// brackets.
-		"exe1234567890123456789",
+		"exe1234567890123456789", "exe[1-2]x1234567890123456789",
 		// A step is a plain decimal number like a bound, so it can neither
 		// carry a sign nor be large enough to wrap around.
 		"exe[1-9/+2]", "exe[5-999999999999999999/9223372036854775807]",
@@ -524,7 +565,7 @@ func TestAddAndContains(t *testing.T) {
 	if !ns.Contains("exe01") {
 		t.Error("exe01 and exe1 name the same host, so Contains must match")
 	}
-	if ns.Contains("exe9") || ns.Contains("not a host[") || ns.Contains("exe1]") {
+	if ns.Contains("exe9") || ns.Contains("sub9") || ns.Contains("login") || ns.Contains("not a host[") || ns.Contains("exe1]") {
 		t.Error("Contains matched a host that is not a member")
 	}
 	if err := ns.Add("exe["); err == nil {
@@ -582,6 +623,7 @@ func TestExpressionLimits(t *testing.T) {
 		{"exe[1-100]!exe[1-100],exe1", "together"},
 		{"a[1-60]!a[1-60],b1", "together"},
 		{"exe[1-100],login", "together"},
+		{"exe[1-100]!login", "together"},
 		// A pattern is weighed one dimension at a time, before the next is
 		// expanded.
 		{"a[1-2]b[1-2]c[1-2]d[1-2]e[1-2]f[1-2]g[1-2]h[1-2]", "hosts"},
@@ -698,4 +740,29 @@ func TestCanonicalReturnsAHeldName(t *testing.T) {
 
 func contains(names []string, name string) bool {
 	return slices.Contains(names, name)
+}
+
+// TestConcurrentReads reads one set from several goroutines at once, which
+// the race detector checks: a set folds once and keeps the fold, and the
+// readers that fold it first do so at the same time.
+func TestConcurrentReads(t *testing.T) {
+	t.Parallel()
+
+	ns := nodeset.MustParse("exe[1-100]!exe50,rack[1-4]node[1-8]!rack2node3,login")
+	want := ns.Clone()
+	var wg sync.WaitGroup
+	for range 8 {
+		wg.Go(func() {
+			if got := ns.String(); got != want.String() {
+				t.Errorf("String() = %q, want %q", got, want.String())
+			}
+			if got := ns.Expand(); !equal(got, want.Expand()) {
+				t.Errorf("Expand() = %v, want %v", got, want.Expand())
+			}
+			if !ns.Contains("rack1node1") || ns.Len() != want.Len() {
+				t.Error("a concurrent read saw another set")
+			}
+		})
+	}
+	wg.Wait()
 }
