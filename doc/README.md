@@ -11,7 +11,7 @@ which pkg.go.dev publishes:
 | Document | What it covers |
 | --- | --- |
 | [language.md](language.md) | The node set language: the rules chosen and why, where they differ from ClusterShell, host lists for Slurm, and the limits |
-| [testing.md](testing.md) | What is tested and how, from fuzzing to the ClusterShell corpus and the size tests |
+| [testing.md](testing.md) | What is tested and how, from fuzzing to the ClusterShell corpus, ClusterShell itself and the size tests |
 | [decisions.md](decisions.md) | What was decided, why, and what it costs, the comparison with other Go node set libraries included |
 | [release.md](release.md) | Cutting, withdrawing and verifying a release |
 

@@ -20,7 +20,7 @@ type NodeSet struct {
 	autostep int
 }
 
-// Option configures parsing and rendering.
+// Option configures a set.
 type Option func(*NodeSet)
 
 // WithAutostep folds arithmetic progressions of at least n elements into
@@ -90,7 +90,8 @@ func (ns *NodeSet) Clone() *NodeSet {
 	return out
 }
 
-// Add parses names and adds the hosts they name to the set.
+// Add parses an expression, without resolving groups, and adds the hosts it
+// names to the set.
 func (ns *NodeSet) Add(expr string) error {
 	other, err := parseExpression(expr, nil, 0, newBudget())
 	if err != nil {

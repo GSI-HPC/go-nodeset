@@ -42,7 +42,7 @@ func ExampleNodeSet_String() {
 	ns := nodeset.MustParse("exe01,exe02,exe03,exe3 exe05 login")
 	fmt.Println(ns)
 
-	// Several numeric dimensions fold independently.
+	// Names with several numbers fold as ClusterShell folds them.
 	fmt.Println(nodeset.MustParse("rack1node01,rack1node02,rack2node01,rack2node02"))
 
 	// Steps are written only when asked for.
@@ -56,7 +56,8 @@ func ExampleNodeSet_String() {
 }
 
 func ExampleNodeSet_Expand() {
-	// Hosts come in order of their numbers, not of their names as strings.
+	// Hosts with one number come in order of their numbers, not of their
+	// names as strings.
 	ns := nodeset.MustParse("exe[9-11],rack[1-2]node[1-2]")
 	fmt.Println(strings.Join(ns.Expand(), " "))
 	// Output:

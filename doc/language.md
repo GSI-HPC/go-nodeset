@@ -222,18 +222,19 @@ first has hosts outside the second in one dimension only, in an intersection
 always, and in a symmetric difference when they differ in one dimension at
 most. `exe[1-1000000]!exe5` and `r[1-1000]n[1-1000]!r[1-10]n[1-1000]` never
 list their hosts. Any other combination lists the hosts of the pattern one
-by one. The most an expression can cost is the largest
-set it may list, about 130 MiB of allocation and half a second of time for
-2²⁰ hosts.
+by one. The most an expression can cost is 2²⁰ names written one by one:
+parsing them allocates about 215 MiB and takes one to one and a half seconds
+on a four-core machine.
 
 Bounds and steps are plain decimal numbers of at most eighteen digits, so no
 arithmetic on them can overflow.
 
 A set keeps its fold until it changes, and `Expand` lists the hosts from
 it. A bracketed name folds and lists in time proportional to its ranges and
-its hosts, without sorting. Folding a listed set of one number costs
+its hosts, and never sorts the hosts. Folding a listed set of one number costs
 O(n log n) in the number of hosts. A listed set with several numbers in its
 names is folded in passes, each of which costs about O(n log n); ClusterShell
 compares every pair of vectors in some of them, and the package finds the
-same pairs through an index instead. Parsing and printing a listed set of a
-million hosts, the most an expression may name, takes about a second.
+same pairs through an index instead. Parsing and printing a million hosts
+written one by one takes about two seconds when their names have one number,
+and about four and a half when they have two.
