@@ -32,7 +32,8 @@ release breaks no API, expression or output (see Compatibility).
   several numbers as ClusterShell does.
 - `resolver.go`: `Resolver`, the optional `Lister`, and `MapResolver`.
 - `*_test.go`: unit tests (`nodeset_test.go`), the ClusterShell corpus
-  (`clustershell_test.go`), `FuzzParseFold` (`fuzz_test.go`), the examples
+  (`clustershell_test.go`), `FuzzParseFold` (`fuzz_test.go`), the nD fold
+  against a transcription of ClusterShell's (`foldnd_test.go`), the examples
   (`example_test.go`), and `export_test.go`, which lets tests lower the
   limits.
 - `testdata/`: the ClusterShell corpus, `clustershell.txt`;
@@ -61,7 +62,7 @@ make test             # go test -race ./...
 make floor            # vet and test with the go line of go.mod
 make cover            # go-test-coverage: every file at 100% (.testcoverage.yml)
 make fuzz             # FuzzParseFold for 90 s, as CI runs it (FUZZTIME=10m for longer)
-make clustershell     # compare with ClusterShell itself (needs python3; CLUSTERSHELL_CASES=)
+make clustershell     # compare with ClusterShell itself, record the corpus again (needs python3; CLUSTERSHELL_CASES=)
 make tidy             # go mod tidy, and fail if go.mod requires anything
 make vuln             # govulncheck
 make reuse            # reuse lint (pip install reuse)

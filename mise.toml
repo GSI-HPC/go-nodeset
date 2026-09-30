@@ -7,7 +7,7 @@
 [tools]
 # The newest Go release line, which CI's current jobs use through
 # .github/actions/setup-go; mise takes its newest patch, as they do. The go
-# line in go.mod is the oldest release the code compiles with, which CI tests
+# line in go.mod is the oldest release the Go project supports, which CI tests
 # as well (doc/decisions.md, decision 2).
 go = "1.27"
 

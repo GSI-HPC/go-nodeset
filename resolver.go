@@ -109,7 +109,8 @@ type MapResolver struct {
 	Default string
 }
 
-// NewMapResolver builds a resolver for a single unnamed source.
+// NewMapResolver builds a resolver for a single source, which is also the
+// default one.
 func NewMapResolver(source string, groups map[string]string) *MapResolver {
 	return &MapResolver{
 		Groups:  map[string]map[string]string{source: groups},

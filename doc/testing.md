@@ -5,7 +5,8 @@
 
 The `nodeset` package is tested on its own, with the standard library alone:
 table-driven unit tests, a fuzz target, a differential corpus recorded with
-ClusterShell, and tests of size and cost. [language.md](language.md) describes
+ClusterShell, a comparison with ClusterShell itself, and tests of size and
+cost. [language.md](language.md) describes
 the language they hold the package to.
 
 ## What is tested where
@@ -48,8 +49,9 @@ ClusterShell's `NodeSet`, and compares the answers with the package's:
 
 - the lines of the corpus that name no divergence;
 - expressions both must reject;
-- 20,000 expressions generated from a fixed seed, of one to four terms joined
-  by the four operators: ranges, steps, lists, padding, one to three numbers
+- expressions generated from a fixed seed, 20,000 in CI and with
+  `make clustershell`, 5,000 when the test is run directly, of one to four terms joined
+  by the four operators: ranges, steps, lists, padding, none to two numbers
   in a name, domains, nested groups from two sources, and autostep from 2
   to 4.
 
@@ -62,17 +64,19 @@ stay out of the differences
 [language.md](language.md#where-this-differs-from-clustershell) lists: each
 number of a name has one width in every expression.
 
+Locally, `make clustershell` sets up ClusterShell in `.clustershell/`, runs
+the test, and records the corpus again, failing if ClusterShell's answers
+have changed. `NODESET_CLUSTERSHELL_CASES` and `NODESET_CLUSTERSHELL_SEED`
+run more expressions, or others. The test is skipped where
+`NODESET_CLUSTERSHELL_PYTHON` is not set, so that `go test` needs nothing but
+Go.
+
 **The folding of names with several numbers** is checked against a
 reference as well. `TestFoldNDMatchesReference` folds random sets of two to
 four dimensions, some of them with values at two widths, both with the
 package and with a plain transcription of ClusterShell's `RangeSetND`
 folding, which compares every pair of vectors, and requires the same vectors
-in the same order. Locally, `make clustershell` sets up ClusterShell in
-`.clustershell/`, runs the test, and records the corpus again, failing if
-ClusterShell's answers have changed.
-`NODESET_CLUSTERSHELL_CASES` and `NODESET_CLUSTERSHELL_SEED` run more
-expressions, or others. The test is skipped where `NODESET_CLUSTERSHELL_PYTHON`
-is not set, so that `go test` needs nothing but Go.
+in the same order. It needs no Python and always runs.
 
 **Size and cost** are tests of their own. One folds sets of a quarter of a
 million hosts, which would take more than a minute if folding were quadratic.
