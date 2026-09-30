@@ -310,21 +310,13 @@ func symmetricDifferenceProducts(a, b *group) (*group, bool) {
 	return withDim(a, at, a.dims[at].combine(b.dims[at], true, true, false)), true
 }
 
-// nodes returns the hosts as nodes, in no particular order.
+// nodes returns the hosts of a listed group as nodes, in no particular
+// order.
 func (g *group) nodes() []node {
-	out := make([]node, 0, g.len())
-	if g.hosts != nil {
-		for _, at := range g.hosts {
-			out = append(out, node{vals: g.data[at : at+g.width : at+g.width], pads: g.data[at+g.width : at+2*g.width : at+2*g.width]})
-		}
-		return out
+	out := make([]node, 0, len(g.hosts))
+	for _, at := range g.hosts {
+		out = append(out, node{vals: g.data[at : at+g.width : at+g.width], pads: g.data[at+g.width : at+2*g.width : at+2*g.width]})
 	}
-	flat := make([]int, 0, g.len()*2*g.width)
-	g.each(func(vals, pads []int) {
-		flat = append(append(flat, vals...), pads...)
-		end := len(flat)
-		out = append(out, node{vals: flat[end-2*g.width : end-g.width : end-g.width], pads: flat[end-g.width : end : end]})
-	})
 	return out
 }
 

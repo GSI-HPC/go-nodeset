@@ -349,7 +349,7 @@ func (ns *NodeSet) dropEmpty(pattern string) {
 func (ns *NodeSet) Hostlist() string {
 	var buf []byte
 	for _, p := range sortedPatterns(ns.groups) {
-		for _, v := range foldOneAxis(p, ns.groups[p].nodes()) {
+		for _, v := range ns.groups[p].hostlist() {
 			if len(buf) > 0 {
 				buf = append(buf, ',')
 			}
