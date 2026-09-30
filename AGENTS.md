@@ -13,8 +13,8 @@ rest of the documentation. Personal, uncommitted instructions belong in
 ## Status
 
 The engine, moved here with its history from the repository where it was
-written, which `README.md` names. v0: the API may still change in a minor
-release (see Compatibility).
+written, which `README.md` names. Stable from v1.0.0: a minor or patch
+release breaks no API, expression or output (see Compatibility).
 
 ## Layout
 
@@ -100,8 +100,11 @@ go-test-coverage: `go install github.com/vladopajic/go-test-coverage/v2@latest`.
 - The `go` line is the oldest Go release the Go project supports, as a `.0`
   release, with no `toolchain` line (decision 2). Raising it is a commit of
   its own; the `bump-go` skill covers it.
-- Semantic versions. v0 for now: a breaking change is allowed in a minor
-  release and is named in the release notes. Adding API is a minor release.
+- Semantic versions from v1.0.0 (decision 10). A fix is a patch release;
+  new API, a new form of expression or a higher `go` line is a minor one.
+  A breaking change to the API, to what an expression names, or to the
+  output of `String`, `Hostlist` or `Expand` needs a major version with
+  the module path `/v2`, and a decision of its own.
 - Nothing in the tree names a version (decision 4). A pushed tag is never
   moved or deleted; a broken release is retracted in `go.mod`.
 

@@ -12,12 +12,13 @@ edited: a later one supersedes it, and the earlier one's status names it.
 | [1](#1-apache-20-and-gsi-holds-the-copyright) | Apache-2.0, and GSI holds the copyright | accepted |
 | [2](#2-the-go-line-is-the-oldest-go-release-still-supported) | The go line is the oldest Go release still supported | accepted |
 | [3](#3-the-module-requires-nothing) | The module requires nothing | accepted |
-| [4](#4-a-release-is-a-signed-tag) | A release is a signed tag | accepted |
+| [4](#4-a-release-is-a-signed-tag) | A release is a signed tag | accepted, in part superseded by [10](#10-the-first-release-is-v100) |
 | [5](#5-an-engine-of-its-own-rather-than-an-existing-go-library) | An engine of its own rather than an existing Go library | accepted |
 | [6](#6-clustershell-itself-is-the-reference-in-ci) | ClusterShell itself is the reference in CI | accepted, in part superseded by [7](#7-the-package-prints-what-clustershell-prints) |
 | [7](#7-the-package-prints-what-clustershell-prints) | The package prints what ClusterShell prints | accepted, in part superseded by [8](#8-a-set-keeps-its-ranges-and-its-fold) |
 | [8](#8-a-set-keeps-its-ranges-and-its-fold) | A set keeps its ranges and its fold | accepted, extended by [9](#9-operators-combine-ranges-where-the-result-is-ranges) |
 | [9](#9-operators-combine-ranges-where-the-result-is-ranges) | Operators combine ranges where the result is ranges | accepted |
+| [10](#10-the-first-release-is-v100) | The first release is v1.0.0 | accepted |
 
 ## 1. Apache-2.0, and GSI holds the copyright
 
@@ -144,7 +145,8 @@ included, or done without.
 
 ## 4. A release is a signed tag
 
-Status: accepted
+Status: accepted, in part superseded by
+[decision 10](#10-the-first-release-is-v100)
 
 ### Context
 
@@ -451,3 +453,42 @@ a result with holes host by host all the same.
   on listed hosts check against in the tests.
 - A result with holes still lists the hosts of its pattern, and the fold
   of a million of them takes about two seconds.
+
+## 10. The first release is v1.0.0
+
+Status: accepted
+
+### Context
+
+Decision 4 kept the module at v0 until its API had held still through
+releases of the programs that import it. The module has not been tagged
+yet: the engine was written and released inside clusterctl, and its tags
+stayed there. Its API is small, a set, its operators and a resolver, and
+what it accepts and prints is held to ClusterShell's by the corpus and by
+ClusterShell itself in CI (decisions 6 and 7), not left to settle. The
+maintainer chose v1.0.0 for the first release.
+
+### Decision
+
+- The first release is v1.0.0, and the module follows semantic versioning
+  from it. A fix is a patch release. New API, a new form of expression, a
+  raised limit or a higher `go` line is a minor release.
+- A minor or patch release does not break:
+  - an exported identifier or its documented behaviour;
+  - an expression it accepts, which keeps naming the same hosts;
+  - the output of `String` and `Hostlist`, and the order of `Expand`.
+- The text of an error, speed and memory are not covered. The expansion
+  limits may be raised, never lowered.
+- A breaking change is a new major version, with its own module path,
+  `github.com/GSI-HPC/go-nodeset/v2`, and is a decision of its own.
+- The rest of decision 4 stands: a release is a signed tag, nothing in the
+  tree names a version, and a broken release is retracted.
+
+### Costs
+
+- An exported identifier stays until v2. `Resolver` cannot gain a method:
+  a new capability comes as an optional interface, as `Lister` does.
+- Recording a newer ClusterShell whose output differs changes the output
+  of this package, so it waits for a major version, or is listed in
+  `doc/language.md` as a divergence until then.
+- A v2 changes the import path of every program that moves to it.

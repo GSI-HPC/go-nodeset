@@ -5,8 +5,8 @@
 
 ## Supported versions
 
-Fixes go into a new release of the newest minor version. While the module
-is at v0, that is the only version supported.
+Fixes go into a patch release of the newest minor version, which is the only
+version supported.
 
 ## Reporting a vulnerability
 
