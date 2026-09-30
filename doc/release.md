@@ -8,14 +8,16 @@ maintainers create tags.
 
 ## Cutting a release
 
-1. Pick the commit on `main`, with CI green on it, and the version: a
-   breaking change in v0 raises the minor version, and so does a higher
-   `go` line.
+1. Pick the commit on `main`, with CI green on it, and the version
+   ([decision 10](decisions.md#10-the-first-release-is-v100)): a fix
+   raises the patch version; new API, a new form of expression or a
+   higher `go` line raises the minor version. A breaking change needs a
+   new major version and module path, which is a decision of its own.
 2. Write the message to a file. Its first line is the title; the rest is
    Markdown and becomes the release notes:
 
    ```markdown
-   go-nodeset v0.2.0
+   go-nodeset v1.2.0
 
    ## Changes
 
@@ -26,8 +28,8 @@ maintainers create tags.
    `#`, Markdown headings included, so keep whitespace cleanup only:
 
    ```console
-   $ git tag -s v0.2.0 --cleanup=whitespace -F notes.md <commit>
-   $ git push origin v0.2.0
+   $ git tag -s v1.2.0 --cleanup=whitespace -F notes.md <commit>
+   $ git push origin v1.2.0
    ```
 
 The Release workflow verifies the tag, tests the tagged commit on both Go
@@ -41,7 +43,7 @@ database keep it regardless. Add a `retract` directive with the reason to
 `go.mod` and ship it in the next release:
 
 ```go
-retract v0.2.0 // Tagged from the wrong commit.
+retract v1.2.0 // Tagged from the wrong commit.
 ```
 
 ## Setting up verification

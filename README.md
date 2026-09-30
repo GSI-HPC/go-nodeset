@@ -65,8 +65,9 @@ project still supports, and follows it up after each Go release
 
 Releases are signed tags `vX.Y.Z`, and each has
 [release notes](https://github.com/GSI-HPC/go-nodeset/releases). The module
-is at v0 while its API settles, so a minor release may change it; its notes
-say how ([decision 4](doc/decisions.md#4-a-release-is-a-signed-tag)).
+is stable from v1.0.0: a minor or patch release breaks no API, changes no
+expression's hosts and changes no folded output
+([decision 10](doc/decisions.md#10-the-first-release-is-v100)).
 
 ## Contributing
 
