@@ -262,9 +262,6 @@ func parseProduct(term string, b *budget) (*group, error) {
 			i++
 		}
 	}
-	if pattern.Len() == 0 && len(dims) == 0 {
-		return nil, fmt.Errorf("empty node name")
-	}
 	if total > b.left {
 		return nil, b.exceeded(term)
 	}
@@ -283,10 +280,30 @@ type plainName struct {
 // parse reads a name without brackets and charges its host to b, as
 // parsePattern reads and charges it.
 func (p *plainName) parse(term string, b *budget) error {
-	if strings.HasPrefix(term, "-") {
-		return fmt.Errorf("%q is not a host name: it begins with -", term)
+	if err := p.read(term); err != nil {
+		return err
 	}
-	p.pattern, p.vals, p.pads = p.pattern[:0], p.vals[:0], p.pads[:0]
+	if b.left < 1 {
+		return b.exceeded(term)
+	}
+	b.left--
+	return nil
+}
+
+// read reads a name without brackets into p.
+func (p *plainName) read(term string) error {
+	var err error
+	p.pattern, p.vals, p.pads, err = readPlain(term, p.pattern[:0], p.vals[:0], p.pads[:0])
+	return err
+}
+
+// readPlain reads a name without brackets, appending its pattern, its
+// values and their widths to the slices given. It takes and returns the
+// slices by value, so that buffers on a caller's stack stay there.
+func readPlain(term string, pattern []byte, vals, pads []int) ([]byte, []int, []int, error) {
+	if strings.HasPrefix(term, "-") {
+		return nil, nil, nil, fmt.Errorf("%q is not a host name: it begins with -", term)
+	}
 	for i := 0; i < len(term); {
 		c := term[i]
 		switch {
@@ -297,23 +314,19 @@ func (p *plainName) parse(term string, b *budget) error {
 			}
 			n, err := parseNumber(term[i:j])
 			if err != nil {
-				return fmt.Errorf("in %q: %w", term, err)
+				return nil, nil, nil, fmt.Errorf("in %q: %w", term, err)
 			}
-			p.vals = append(p.vals, n)
-			p.pads = append(p.pads, normalPad(n, padOf(term[i:j])))
-			p.pattern = append(p.pattern, "%s"...)
+			vals = append(vals, n)
+			pads = append(pads, normalPad(n, padOf(term[i:j])))
+			pattern = append(pattern, "%s"...)
 			i = j
 		case c == '%':
-			p.pattern = append(p.pattern, "%%"...)
+			pattern = append(pattern, "%%"...)
 			i++
 		default:
-			p.pattern = append(p.pattern, c)
+			pattern = append(pattern, c)
 			i++
 		}
 	}
-	if b.left < 1 {
-		return b.exceeded(term)
-	}
-	b.left--
-	return nil
+	return pattern, vals, pads, nil
 }

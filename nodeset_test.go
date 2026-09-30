@@ -587,8 +587,13 @@ func TestAddAndContains(t *testing.T) {
 	if !ns.Contains("exe01") {
 		t.Error("exe01 and exe1 name the same host, so Contains must match")
 	}
-	if ns.Contains("exe9") || ns.Contains("sub9") || ns.Contains("login") || ns.Contains("not a host[") || ns.Contains("exe1]") {
-		t.Error("Contains matched a host that is not a member")
+	if !ns.Contains("exe[2]") {
+		t.Error("exe[2] names one host of the set, so Contains must match")
+	}
+	for _, name := range []string{"exe9", "sub9", "login", "not a host[", "exe1]", "exe[1-2]", "-exe1", "exe1234567890123456789", ""} {
+		if ns.Contains(name) {
+			t.Errorf("Contains(%q) matched a host that is not a member", name)
+		}
 	}
 	if err := ns.Add("exe["); err == nil {
 		t.Error("Add of a malformed expression should fail")
@@ -720,6 +725,22 @@ func TestOversizedExpressionsAreRefusedEarly(t *testing.T) {
 	}
 }
 
+// TestContainsDoesNotAllocate holds a lookup of a name without brackets to
+// no allocation, in a set kept as ranges and in one whose hosts are listed.
+func TestContainsDoesNotAllocate(t *testing.T) {
+	for _, expr := range []string{"r[1-20]n[001-128]", "r1n001,r3n017,r20n128"} {
+		ns := nodeset.MustParse(expr)
+		allocs := testing.AllocsPerRun(100, func() {
+			ns.Contains("r3n017")
+			ns.Contains("r21n1")
+			ns.Contains("login1")
+		})
+		if allocs != 0 {
+			t.Errorf("Contains in %q allocated %v times per run, want 0", expr, allocs)
+		}
+	}
+}
+
 // TestCanonicalReturnsAHeldName covers a set that holds hosts of one pattern
 // written with different widths. Canonical used to render every member at one
 // width per pattern, so it answered with names the set was never given.
@@ -742,6 +763,19 @@ func TestCanonicalReturnsAHeldName(t *testing.T) {
 	}
 	for _, name := range []string{"exe12", "exe[1-2]", "-exe1", ""} {
 		if got, ok := ns.Canonical(name); ok {
+			t.Errorf("Canonical(%q) = %q, want no match", name, got)
+		}
+	}
+
+	// A set kept as a product of ranges answers from the ranges.
+	p := nodeset.MustParse("r[1-2]n[001-128]")
+	for ask, want := range map[string]string{"r2n5": "r2n005", "r[1]n[128]": "r1n128"} {
+		if got, ok := p.Canonical(ask); !ok || got != want {
+			t.Errorf("Canonical(%q) = %q, %v, want %q", ask, got, ok, want)
+		}
+	}
+	for _, name := range []string{"r3n1", "r1n129", "r1n1-"} {
+		if got, ok := p.Canonical(name); ok {
 			t.Errorf("Canonical(%q) = %q, want no match", name, got)
 		}
 	}

@@ -3,6 +3,8 @@
 
 package nodeset
 
+import "strings"
+
 // NodeSet is an unordered set of host names that renders in folded form.
 // The zero value is not usable; call New or Parse.
 //
@@ -101,8 +103,12 @@ func (ns *NodeSet) Add(expr string) error {
 // Contains reports whether name is a member. Padding is ignored, so "exe01"
 // and "exe1" name the same host.
 func (ns *NodeSet) Contains(name string) bool {
-	_, _, _, ok := ns.lookup(name)
-	return ok
+	// Most names have a short pattern and few numbers, so they are read
+	// into buffers on the stack and a lookup allocates nothing.
+	var pattern [64]byte
+	var vals, pads [4]int
+	g, v := ns.host(name, pattern[:0], vals[:0], pads[:0])
+	return g != nil && g.has(v)
 }
 
 // Canonical returns the name this set holds for a host, which is always a name
@@ -113,30 +119,39 @@ func (ns *NodeSet) Contains(name string) bool {
 // "exe1", because padding is not part of a host's identity and both name one
 // host. A set holding exe0001 and exe11 answers "exe11" for exe11.
 func (ns *NodeSet) Canonical(name string) (string, bool) {
-	pattern, vals, pads, ok := ns.lookup(name)
+	var pattern, buf [64]byte
+	var vs, ps [4]int
+	g, vals := ns.host(name, pattern[:0], vs[:0], ps[:0])
+	if g == nil {
+		return "", false
+	}
+	pads, ok := g.find(vals)
 	if !ok {
 		return "", false
 	}
-	return string(appendName(nil, pattern, vals, pads)), true
+	return string(appendName(buf[:0], g.pattern, vals, pads)), true
 }
 
-// lookup finds the member a single host name refers to: its pattern, its
-// values, and the widths the set holds them with.
-func (ns *NodeSet) lookup(name string) (string, []int, []int, bool) {
-	one, err := parseProduct(name, newBudget())
-	if err != nil || one.len() != 1 {
-		return "", nil, nil, false
+// host reads a name that names one host and returns the group of the set
+// that has its pattern, with the host's values. The group is nil when the
+// name names no single host or the set holds no host of its pattern. The
+// slices given are the buffers the name is read into.
+func (ns *NodeSet) host(name string, pattern []byte, vals, pads []int) (*group, []int) {
+	if strings.ContainsAny(name, "[]") {
+		one, err := parseProduct(name, newBudget())
+		if err != nil || one.len() != 1 {
+			return nil, nil
+		}
+		for _, rs := range one.dims {
+			vals = append(vals, rs.values[0])
+		}
+		return ns.groups[one.pattern], vals
 	}
-	g, ok := ns.groups[one.pattern]
-	if !ok {
-		return "", nil, nil, false
+	pattern, vals, _, err := readPlain(name, pattern, vals, pads)
+	if err != nil {
+		return nil, nil
 	}
-	vals := make([]int, one.width)
-	for d, rs := range one.dims {
-		vals[d] = rs.values[0]
-	}
-	pads, ok := g.find(vals)
-	return one.pattern, vals, pads, ok
+	return ns.groups[string(pattern)], vals
 }
 
 // Expand returns the host names in the order ClusterShell lists them: by
