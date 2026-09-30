@@ -26,6 +26,10 @@ func TestParseExpand(t *testing.T) {
 		{"exe[0001-0003]", []string{"exe0001", "exe0002", "exe0003"}},
 		{"exe[1-10/3]", []string{"exe1", "exe4", "exe7", "exe10"}},
 		{"exe[1,5,9]", []string{"exe1", "exe5", "exe9"}},
+		// Names with several numbers are listed vector by vector, as the set
+		// folds and as ClusterShell lists them, not in numeric order.
+		{"rack[1-2]node[01-04]!rack1node02", []string{"rack2node01", "rack2node02", "rack2node03", "rack2node04", "rack1node01", "rack1node03", "rack1node04"}},
+		{"exe[1-3],rack[1-2]node[1-2]!rack1node1,sw1p[1-2],sw2p1", []string{"exe1", "exe2", "exe3", "rack2node1", "rack2node2", "rack1node2", "sw1p1", "sw1p2", "sw2p1"}},
 		{"exe[09-11]", []string{"exe09", "exe10", "exe11"}},
 		{"exe[1-2]-ib[0-1]", []string{"exe1-ib0", "exe1-ib1", "exe2-ib0", "exe2-ib1"}},
 		{"rack[1-2]node[01-02]", []string{"rack1node01", "rack1node02", "rack2node01", "rack2node02"}},

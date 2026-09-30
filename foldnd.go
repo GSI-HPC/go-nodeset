@@ -67,26 +67,25 @@ func newBox(dims [][]int) box {
 	return box{dims: dims, size: n}
 }
 
-// newSpace ranks the values the hosts take, and returns the hosts as ranks.
-func newSpace(nodes []node) (*ndSpace, [][]int) {
+// newSpace ranks the values the hosts take, and returns the hosts as ranks:
+// host i holds ranks[i*d : i*d+d] for d dimensions, all in one slice.
+func newSpace(nodes []node) (*ndSpace, []int) {
 	dimCount := len(nodes[0].vals)
 	sp := &ndSpace{coords: make([][]coord, dimCount), text: make([][]int, dimCount)}
-	ranked := make([][]int, len(nodes))
-	for i := range ranked {
-		ranked[i] = make([]int, dimCount)
-	}
+	ranks := make([]int, len(nodes)*dimCount)
+	type spelling struct{ val, pad int }
 	for d := range dimCount {
-		index := map[coord]int{}
+		index := map[spelling]int{}
 		for _, n := range nodes {
-			c := coord{val: n.vals[d], pad: n.pads[d], text: format(n.vals[d], n.pads[d])}
-			if _, ok := index[c]; !ok {
-				index[c] = 0
-				sp.coords[d] = append(sp.coords[d], c)
+			k := spelling{n.vals[d], n.pads[d]}
+			if _, ok := index[k]; !ok {
+				index[k] = 0
+				sp.coords[d] = append(sp.coords[d], coord{val: k.val, pad: k.pad, text: format(k.val, k.pad)})
 			}
 		}
 		slices.SortFunc(sp.coords[d], compareCoord)
 		for r, c := range sp.coords[d] {
-			index[c] = r
+			index[spelling{c.val, c.pad}] = r
 		}
 		byText := make([]int, len(sp.coords[d]))
 		for r := range byText {
@@ -100,10 +99,10 @@ func newSpace(nodes []node) (*ndSpace, [][]int) {
 			sp.text[d][r] = place
 		}
 		for i, n := range nodes {
-			ranked[i][d] = index[coord{val: n.vals[d], pad: n.pads[d], text: format(n.vals[d], n.pads[d])}]
+			ranks[i*dimCount+d] = index[spelling{n.vals[d], n.pads[d]}]
 		}
 	}
-	return sp, ranked
+	return sp, ranks
 }
 
 // compare orders boxes as ClusterShell sorts them before every pass: larger
@@ -146,26 +145,59 @@ func join(a, b box, at int) box {
 	return newBox(dims)
 }
 
-// keys returns, for each dimension, the other dimensions of a box written
-// out: two boxes differ in that dimension only, and so merge, exactly when
-// they share its key.
-func keys(b box) []string {
-	out := make([]string, len(b.dims))
-	var buf []byte
-	for d := range b.dims {
-		buf = buf[:0]
-		for e, x := range b.dims {
-			if e == d {
-				continue
-			}
-			buf = binary.AppendUvarint(buf, uint64(len(x)))
-			for _, v := range x {
-				buf = binary.AppendUvarint(buf, uint64(v))
-			}
+// key writes out the dimensions of a box other than d, into buf: two boxes
+// differ in dimension d only, and so merge, exactly when their keys for d
+// are the same.
+func key(buf []byte, b box, d int) []byte {
+	buf = buf[:0]
+	for e, x := range b.dims {
+		if e == d {
+			continue
 		}
-		out[d] = string(buf)
+		buf = binary.AppendUvarint(buf, uint64(len(x)))
+		for _, v := range x {
+			buf = binary.AppendUvarint(buf, uint64(v))
+		}
 	}
-	return out
+	return buf
+}
+
+// byKey indexes the boxes of a pass by their key for one dimension: the
+// boxes of each key are a range of positions, ascending, in one slice.
+type byKey struct {
+	ranges    map[string][2]int
+	positions []int
+}
+
+func newByKey(boxes []box, d int) byKey {
+	keys := make([]string, len(boxes))
+	var buf []byte
+	for i, b := range boxes {
+		buf = key(buf, b, d)
+		keys[i] = string(buf)
+	}
+	positions := make([]int, len(boxes))
+	for i := range positions {
+		positions[i] = i
+	}
+	slices.SortStableFunc(positions, func(i, j int) int { return strings.Compare(keys[i], keys[j]) })
+	ranges := make(map[string][2]int)
+	for lo := 0; lo < len(positions); {
+		hi := lo + 1
+		for hi < len(positions) && keys[positions[hi]] == keys[positions[lo]] {
+			hi++
+		}
+		ranges[keys[positions[lo]]] = [2]int{lo, hi}
+		lo = hi
+	}
+	return byKey{ranges: ranges, positions: positions}
+}
+
+// after returns the positions of the boxes with key k, beyond from.
+func (x byKey) after(k []byte, from int) []int {
+	r := x.ranges[string(k)]
+	positions := x.positions[r[0]:r[1]]
+	return positions[sort.SearchInts(positions, from+1):]
 }
 
 // mergePasses merges boxes as ClusterShell's RangeSetND does.
@@ -279,19 +311,14 @@ func (g *grower) box() box {
 // pass looks them up in an index of the boxes by key, instead of trying
 // every one.
 func fullPass(boxes []box) ([]box, bool) {
-	dims := len(boxes[0].dims)
-	index := make([]map[string][]int, dims)
+	index := make([]byKey, len(boxes[0].dims))
 	for d := range index {
-		index[d] = map[string][]int{}
-	}
-	for i, b := range boxes {
-		for d, k := range keys(b) {
-			index[d][k] = append(index[d][k], i)
-		}
+		index[d] = newByKey(boxes, d)
 	}
 
 	gone := make([]bool, len(boxes))
 	changed := false
+	var buf []byte
 	for i := range boxes {
 		if gone[i] {
 			continue
@@ -301,10 +328,10 @@ func fullPass(boxes []box) ([]box, bool) {
 			// The first later box still there that shares a key with the
 			// box, over all its dimensions.
 			next, at := -1, 0
-			for d, k := range keys(cur) {
-				positions := index[d][k]
-				for p := sort.SearchInts(positions, from+1); p < len(positions); p++ {
-					if j := positions[p]; !gone[j] {
+			for d, x := range index {
+				buf = key(buf, cur, d)
+				for _, j := range x.after(buf, from) {
+					if !gone[j] {
 						if next < 0 || j < next {
 							next, at = j, d
 						}
@@ -330,9 +357,10 @@ func fullPass(boxes []box) ([]box, bool) {
 }
 
 // foldND folds the hosts of a pattern with several dimensions into boxes, in
-// the order ClusterShell writes them.
-func foldND(nodes []node) (*ndSpace, []box) {
-	sp, ranked := newSpace(nodes)
+// the order ClusterShell writes them. It returns the hosts as ranks too, as
+// newSpace gives them.
+func foldND(nodes []node) (*ndSpace, []box, []int) {
+	sp, ranks := newSpace(nodes)
 	product := make([][]int, len(sp.coords))
 	n := 1
 	for d, values := range sp.coords {
@@ -346,25 +374,28 @@ func foldND(nodes []node) (*ndSpace, []box) {
 		}
 	}
 	if n == len(nodes) {
-		return sp, []box{newBox(product)}
+		return sp, []box{newBox(product)}, ranks
 	}
-	// One box per host, the dimensions sliced from the host's ranks.
-	boxes := make([]box, len(ranked))
-	for i, r := range ranked {
-		dims := make([][]int, len(r))
-		for d := range r {
-			dims[d] = r[d : d+1 : d+1]
+	// One box per host, its dimensions sliced from the host's ranks, and
+	// every box's list of dimensions sliced from one slice.
+	dimCount := len(sp.coords)
+	boxes := make([]box, len(nodes))
+	dims := make([][]int, len(ranks))
+	for i := range boxes {
+		for d := range dimCount {
+			k := i*dimCount + d
+			dims[k] = ranks[k : k+1 : k+1]
 		}
-		boxes[i] = box{dims: dims, size: 1}
+		boxes[i] = box{dims: dims[i*dimCount : (i+1)*dimCount : (i+1)*dimCount], size: 1}
 	}
-	return sp, sp.mergePasses(boxes)
+	return sp, sp.mergePasses(boxes), ranks
 }
 
 // foldVectors folds the hosts of a pattern with several dimensions into
 // vectors to render, each dimension in numeric order, as one of a single
 // number is, so that a range never mixes widths.
 func foldVectors(pattern string, nodes []node) []vector {
-	sp, boxes := foldND(nodes)
+	sp, boxes, _ := foldND(nodes)
 	out := make([]vector, len(boxes))
 	for i, b := range boxes {
 		dims := make([]*rangeSet, len(b.dims))
@@ -386,25 +417,34 @@ func foldVectors(pattern string, nodes []node) []vector {
 	return out
 }
 
-// expandND lists the hosts of a pattern with several dimensions box by box,
-// in the order foldND gives them, each box with its last dimension varying
-// fastest, as ClusterShell iterates a set.
-func expandND(pattern string, nodes []node) []node {
-	byKey := make(map[string]node, len(nodes))
-	for _, n := range nodes {
-		byKey[n.key()] = n
+// orderND puts the hosts of a pattern with several dimensions, in place, in
+// the order ClusterShell lists them: box by box as foldND gives the boxes,
+// each box with its last dimension varying fastest. Each host is found by a
+// binary search over the hosts sorted by their ranks, so the order costs
+// two slices of indexes and no strings.
+func orderND(nodes []node) {
+	_, boxes, ranks := foldND(nodes)
+	dimCount := len(nodes[0].vals)
+	of := func(i int) []int { return ranks[i*dimCount : (i+1)*dimCount] }
+	byRank := make([]int, len(nodes))
+	for i := range byRank {
+		byRank[i] = i
 	}
-	sp, boxes := foldND(nodes)
-	out := make([]node, 0, len(nodes))
+	slices.SortFunc(byRank, func(a, b int) int { return slices.Compare(of(a), of(b)) })
+
+	// from[k] is the host that goes to place k.
+	from := make([]int, 0, len(nodes))
+	tuple := make([]int, dimCount)
+	idx := make([]int, dimCount)
 	for _, b := range boxes {
-		idx := make([]int, len(b.dims))
+		clear(idx)
 		for {
-			probe := node{pattern: pattern, vals: make([]int, len(idx))}
 			for d, i := range idx {
-				probe.vals[d] = sp.coords[d][b.dims[d][i]].val
+				tuple[d] = b.dims[d][i]
 			}
-			out = append(out, byKey[probe.key()])
-			d := len(idx) - 1
+			k, _ := slices.BinarySearchFunc(byRank, tuple, func(i int, t []int) int { return slices.Compare(of(i), t) })
+			from = append(from, byRank[k])
+			d := dimCount - 1
 			for ; d >= 0; d-- {
 				if idx[d]++; idx[d] < len(b.dims[d]) {
 					break
@@ -416,5 +456,21 @@ func expandND(pattern string, nodes []node) []node {
 			}
 		}
 	}
-	return out
+
+	// Move the hosts along the cycles of the permutation.
+	for start := range from {
+		if from[start] < 0 {
+			continue
+		}
+		held, k := nodes[start], start
+		for {
+			next := from[k]
+			from[k] = -1
+			if next == start {
+				nodes[k] = held
+				break
+			}
+			nodes[k], k = nodes[next], next
+		}
+	}
 }

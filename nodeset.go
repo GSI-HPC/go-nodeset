@@ -4,6 +4,7 @@
 package nodeset
 
 import (
+	"cmp"
 	"maps"
 	"slices"
 	"strings"
@@ -144,18 +145,28 @@ func (ns *NodeSet) Expand() []string {
 
 // sorted returns the members in expansion order: by pattern, and within a
 // pattern with one number numerically, within one with several vector by
-// vector as the set folds, as ClusterShell lists them.
+// vector as the set folds, as ClusterShell lists them. It sorts one copy of
+// the members, and puts the runs of a pattern with several numbers in order
+// in place.
 func (ns *NodeSet) sorted() []node {
-	out := make([]node, 0, len(ns.nodes))
-	for _, p := range ns.byPattern() {
-		if len(p.nodes[0].vals) > 1 {
-			out = append(out, expandND(p.pattern, p.nodes)...)
-			continue
-		}
-		slices.SortFunc(p.nodes, func(a, b node) int { return slices.Compare(a.vals, b.vals) })
-		out = append(out, p.nodes...)
+	nodes := make([]node, 0, len(ns.nodes))
+	for _, n := range ns.nodes {
+		nodes = append(nodes, n)
 	}
-	return out
+	slices.SortFunc(nodes, func(a, b node) int {
+		return cmp.Or(strings.Compare(a.pattern, b.pattern), slices.Compare(a.vals, b.vals))
+	})
+	for i := 0; i < len(nodes); {
+		j := i + 1
+		for j < len(nodes) && nodes[j].pattern == nodes[i].pattern {
+			j++
+		}
+		if len(nodes[i].vals) > 1 {
+			orderND(nodes[i:j])
+		}
+		i = j
+	}
+	return nodes
 }
 
 // String renders the set in folded form, which Parse reads back as the same
