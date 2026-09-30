@@ -4,8 +4,9 @@
 package nodeset
 
 import (
+	"cmp"
 	"fmt"
-	"sort"
+	"slices"
 	"strconv"
 	"strings"
 )
@@ -51,10 +52,18 @@ func normalPad(n, pad int) int {
 
 // format renders one number with its padding.
 func format(n, pad int) string {
-	if pad > 0 {
-		return fmt.Sprintf("%0*d", pad, n)
+	if pad == 0 {
+		return strconv.Itoa(n)
 	}
-	return strconv.Itoa(n)
+	return string(appendFormat(nil, n, pad))
+}
+
+// appendFormat writes out one number with its padding.
+func appendFormat(buf []byte, n, pad int) []byte {
+	for i := digits(n); i < pad; i++ {
+		buf = append(buf, '0')
+	}
+	return strconv.AppendInt(buf, int64(n), 10)
 }
 
 // fits reports whether a value shown with width pad reads the same when shown
@@ -72,19 +81,26 @@ func (rs *rangeSet) add(n, pad int) {
 // sortUnique orders the values and drops repeats. Of two spellings of one
 // number, the one given first is kept.
 func (rs *rangeSet) sortUnique() {
-	idx := make([]int, len(rs.values))
-	for i := range idx {
-		idx[i] = i
+	ascending := true
+	for i := 1; i < len(rs.values) && ascending; i++ {
+		ascending = rs.values[i-1] < rs.values[i]
 	}
-	sort.SliceStable(idx, func(a, b int) bool { return rs.values[idx[a]] < rs.values[idx[b]] })
-	values := make([]int, 0, len(idx))
-	pads := make([]int, 0, len(idx))
-	for _, i := range idx {
-		if n := len(values); n > 0 && values[n-1] == rs.values[i] {
+	if ascending {
+		return
+	}
+	type spelled struct{ val, pad, at int }
+	all := make([]spelled, len(rs.values))
+	for i, v := range rs.values {
+		all[i] = spelled{v, rs.pads[i], i}
+	}
+	slices.SortFunc(all, func(a, b spelled) int { return cmp.Or(cmp.Compare(a.val, b.val), cmp.Compare(a.at, b.at)) })
+	values, pads := rs.values[:0], rs.pads[:0]
+	for _, s := range all {
+		if n := len(values); n > 0 && values[n-1] == s.val {
 			continue
 		}
-		values = append(values, rs.values[i])
-		pads = append(pads, rs.pads[i])
+		values = append(values, s.val)
+		pads = append(pads, s.pad)
 	}
 	rs.values, rs.pads = values, pads
 }
