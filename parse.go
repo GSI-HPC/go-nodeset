@@ -65,10 +65,26 @@ func parseExpression(expr string, res Resolver, depth int, b *budget) (*NodeSet,
 	pending := strings.Builder{}
 	depthBracket := 0
 
+	var plain plainName
 	flush := func() error {
 		term := strings.TrimSpace(pending.String())
 		pending.Reset()
 		if term == "" {
+			return nil
+		}
+		if op == opUnion && term[0] != '@' && strings.IndexByte(term, '[') < 0 {
+			// A name without brackets is one host, added as it is,
+			// without a set of its own.
+			if err := plain.parse(term, b); err != nil {
+				return err
+			}
+			g, ok := result.groups[string(plain.pattern)]
+			if !ok {
+				g = result.listed(string(plain.pattern), len(plain.vals))
+			}
+			g.list()
+			g.add(plain.vals, plain.pads)
+			operand, pendingOp = true, false
 			return nil
 		}
 		ts, err := parseTerm(term, res, depth, b)
@@ -255,4 +271,49 @@ func parseProduct(term string, b *budget) (*group, error) {
 	b.left -= total
 
 	return newProduct(pattern.String(), dims), nil
+}
+
+// plainName is a name without brackets, one host, read into slices that
+// are reused from name to name.
+type plainName struct {
+	pattern    []byte
+	vals, pads []int
+}
+
+// parse reads a name without brackets and charges its host to b, as
+// parsePattern reads and charges it.
+func (p *plainName) parse(term string, b *budget) error {
+	if strings.HasPrefix(term, "-") {
+		return fmt.Errorf("%q is not a host name: it begins with -", term)
+	}
+	p.pattern, p.vals, p.pads = p.pattern[:0], p.vals[:0], p.pads[:0]
+	for i := 0; i < len(term); {
+		c := term[i]
+		switch {
+		case c >= '0' && c <= '9':
+			j := i
+			for j < len(term) && term[j] >= '0' && term[j] <= '9' {
+				j++
+			}
+			n, err := parseNumber(term[i:j])
+			if err != nil {
+				return fmt.Errorf("in %q: %w", term, err)
+			}
+			p.vals = append(p.vals, n)
+			p.pads = append(p.pads, normalPad(n, padOf(term[i:j])))
+			p.pattern = append(p.pattern, "%s"...)
+			i = j
+		case c == '%':
+			p.pattern = append(p.pattern, "%%"...)
+			i++
+		default:
+			p.pattern = append(p.pattern, c)
+			i++
+		}
+	}
+	if b.left < 1 {
+		return b.exceeded(term)
+	}
+	b.left--
+	return nil
 }
