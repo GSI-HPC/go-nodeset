@@ -214,9 +214,15 @@ Each dimension of a name is weighed before it is expanded, against what the
 dimensions before it and the terms before it have left, so an oversized
 expression is refused before its memory is spent. A typo such as
 `exe[1-100000000]` is reported rather than exhausting memory. A bracketed
-name is kept as its ranges, and its hosts are listed one by one only when an
-operator combines it with other hosts of the same pattern, so the caps count
-hosts named, not memory spent. The most an expression can cost is the largest
+name is kept as its ranges, so the caps count hosts named, not memory spent.
+Two such names of one pattern combine range by range whenever the result is
+the product of ranges again: in a union when one holds the other or the two
+differ in one dimension, in a difference when they share no host or the
+first has hosts outside the second in one dimension only, in an intersection
+always, and in a symmetric difference when they differ in one dimension at
+most. `exe[1-1000000]!exe5` and `r[1-1000]n[1-1000]!r[1-10]n[1-1000]` never
+list their hosts. Any other combination lists the hosts of the pattern one
+by one. The most an expression can cost is the largest
 set it may list, about 130 MiB of allocation and half a second of time for
 2²⁰ hosts.
 

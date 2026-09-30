@@ -205,21 +205,109 @@ func (g *group) keep(pred func(vals []int) bool) {
 	g.folded.Store(nil)
 }
 
-// intersectProduct returns the hosts two products share, which is the
-// product of the values their dimensions share, each spelled as in g.
-func (g *group) intersectProduct(o *group) *group {
-	dims := make([]*rangeSet, g.width)
-	for d, rs := range g.dims {
-		shared := &rangeSet{}
-		for i, v := range rs.values {
-			if _, ok := slices.BinarySearch(o.dims[d].values, v); ok {
-				shared.values = append(shared.values, v)
-				shared.pads = append(shared.pads, rs.pads[i])
-			}
+// The hosts two products of one pattern name together are a product again
+// in the cases below, and are computed range by range, without listing the
+// hosts. Each returns false in any other case, and a nil group for no hosts.
+// A host keeps the spelling of the product it comes from, and of a when both
+// hold it, as the operators on listed hosts keep it.
+
+// sameBut returns the one dimension in which two products differ, in values
+// or in widths, or -1 if they differ in none. It returns false if they differ
+// in more than one.
+func sameBut(a, b *group) (int, bool) {
+	at := -1
+	for d, rs := range a.dims {
+		if rs.equal(b.dims[d]) {
+			continue
 		}
-		dims[d] = shared
+		if at >= 0 {
+			return 0, false
+		}
+		at = d
 	}
-	return newProduct(g.pattern, dims)
+	return at, true
+}
+
+// withDim returns a copy of the product a with dimension d replaced, or nil
+// if the new dimension holds no value.
+func withDim(a *group, d int, rs *rangeSet) *group {
+	if len(rs.values) == 0 {
+		return nil
+	}
+	dims := slices.Clone(a.dims)
+	dims[d] = rs
+	return newProduct(a.pattern, dims)
+}
+
+// unionProducts: when b holds no host a does not, the union is a; when the
+// two differ in one dimension, spellings included, it is a with that
+// dimension united.
+func unionProducts(a, b *group) (*group, bool) {
+	within := true
+	for d, rs := range b.dims {
+		if beyond, _ := rs.overlap(a.dims[d]); beyond {
+			within = false
+		}
+	}
+	if within {
+		return a, true
+	}
+	at, ok := sameBut(a, b)
+	if !ok {
+		return nil, false
+	}
+	return withDim(a, at, a.dims[at].combine(b.dims[at], true, true, true)), true
+}
+
+// differenceProducts: when the two share no value in some dimension, the
+// difference is a; when a holds values b does not in one dimension only, it
+// is a with b's values taken out of that dimension.
+func differenceProducts(a, b *group) (*group, bool) {
+	at := -1
+	for d, rs := range a.dims {
+		beyond, shared := rs.overlap(b.dims[d])
+		if !shared {
+			return a, true
+		}
+		if !beyond {
+			continue
+		}
+		if at >= 0 {
+			return nil, false
+		}
+		at = d
+	}
+	if at < 0 {
+		return nil, true
+	}
+	return withDim(a, at, a.dims[at].combine(b.dims[at], true, false, false)), true
+}
+
+// intersectProducts: the hosts two products share are always the product of
+// the values their dimensions share.
+func intersectProducts(a, b *group) *group {
+	out := a
+	for d, rs := range a.dims {
+		if out = withDim(out, d, rs.combine(b.dims[d], false, false, true)); out == nil {
+			return nil
+		}
+	}
+	return out
+}
+
+// symmetricDifferenceProducts: when the two differ in one dimension,
+// spellings included, the hosts in one of them only are a with the values of
+// that dimension in one of them only; when they differ in none, there are
+// none.
+func symmetricDifferenceProducts(a, b *group) (*group, bool) {
+	at, ok := sameBut(a, b)
+	switch {
+	case !ok:
+		return nil, false
+	case at < 0:
+		return nil, true
+	}
+	return withDim(a, at, a.dims[at].combine(b.dims[at], true, true, false)), true
 }
 
 // nodes returns the hosts as nodes, in no particular order.

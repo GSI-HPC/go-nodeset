@@ -235,12 +235,18 @@ func (ns *NodeSet) listed(pattern string, width int) *group {
 func (ns *NodeSet) merge(other *NodeSet, take bool) {
 	for p, og := range other.groups {
 		g, ok := ns.groups[p]
-		if !ok {
+		switch {
+		case !ok:
 			if !take {
 				og = og.clone()
 			}
 			ns.groups[p] = og
 			continue
+		case g.hosts == nil && og.hosts == nil:
+			if u, ok := unionProducts(g, og); ok {
+				ns.groups[p] = u
+				continue
+			}
 		}
 		g.list()
 		og.each(g.add)
@@ -250,8 +256,14 @@ func (ns *NodeSet) merge(other *NodeSet, take bool) {
 func (ns *NodeSet) subtract(other *NodeSet) {
 	for p, og := range other.groups {
 		g, ok := ns.groups[p]
-		if !ok {
+		switch {
+		case !ok:
 			continue
+		case g.hosts == nil && og.hosts == nil:
+			if d, ok := differenceProducts(g, og); ok {
+				ns.put(p, d)
+				continue
+			}
 		}
 		g.list()
 		if og.len() < len(g.hosts) {
@@ -269,14 +281,13 @@ func (ns *NodeSet) intersect(other *NodeSet) {
 		switch {
 		case !ok:
 			delete(ns.groups, p)
-			continue
 		case g.hosts == nil && og.hosts == nil:
-			ns.groups[p] = g.intersectProduct(og)
+			ns.put(p, intersectProducts(g, og))
 		default:
 			g.list()
 			g.keep(og.has)
+			ns.dropEmpty(p)
 		}
-		ns.dropEmpty(p)
 	}
 }
 
@@ -285,12 +296,18 @@ func (ns *NodeSet) intersect(other *NodeSet) {
 func (ns *NodeSet) symmetricDifference(other *NodeSet, take bool) {
 	for p, og := range other.groups {
 		g, ok := ns.groups[p]
-		if !ok {
+		switch {
+		case !ok:
 			if !take {
 				og = og.clone()
 			}
 			ns.groups[p] = og
 			continue
+		case g.hosts == nil && og.hosts == nil:
+			if x, ok := symmetricDifferenceProducts(g, og); ok {
+				ns.put(p, x)
+				continue
+			}
 		}
 		g.list()
 		og.each(func(vals, pads []int) {
@@ -302,6 +319,15 @@ func (ns *NodeSet) symmetricDifference(other *NodeSet, take bool) {
 		})
 		ns.dropEmpty(p)
 	}
+}
+
+// put sets the group of a pattern, or removes it for nil.
+func (ns *NodeSet) put(pattern string, g *group) {
+	if g == nil {
+		delete(ns.groups, pattern)
+		return
+	}
+	ns.groups[pattern] = g
 }
 
 // dropEmpty removes the group of a pattern if it holds no host, so that a
