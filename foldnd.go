@@ -114,14 +114,40 @@ func newSpace(nodes []node) (*ndSpace, []int) {
 func (sp *ndSpace) compare(a, b box) int {
 	c := cmp.Compare(b.size, a.size)
 	for d := 0; c == 0 && d < len(a.dims); d++ {
-		x, y := a.dims[d], b.dims[d]
-		c = cmp.Or(
-			cmp.Compare(len(y), len(x)),
-			cmp.Compare(sp.text[d][x[0]], sp.text[d][y[0]]),
-			cmp.Compare(sp.text[d][x[len(x)-1]], sp.text[d][y[len(y)-1]]),
-		)
+		x, y, text := a.dims[d], b.dims[d], sp.text[d]
+		if c = cmp.Compare(len(y), len(x)); c == 0 {
+			if c = cmp.Compare(text[x[0]], text[y[0]]); c == 0 {
+				c = cmp.Compare(text[x[len(x)-1]], text[y[len(y)-1]])
+			}
+		}
 	}
 	return c
+}
+
+// sortUnits sorts boxes of one host each as compare does, which for them is
+// by the text of each value, dimension by dimension: a radix sort, one
+// counting pass per dimension from the last, in linear time.
+func (sp *ndSpace) sortUnits(boxes []box) {
+	tmp := make([]box, len(boxes))
+	for d := len(sp.text) - 1; d >= 0; d-- {
+		text := sp.text[d]
+		count := make([]int, len(text)+1)
+		for _, b := range boxes {
+			count[text[b.dims[d][0]]+1]++
+		}
+		for i := 1; i < len(count); i++ {
+			count[i] += count[i-1]
+		}
+		for _, b := range boxes {
+			place := text[b.dims[d][0]]
+			tmp[count[place]] = b
+			count[place]++
+		}
+		boxes, tmp = tmp, boxes
+	}
+	if len(sp.text)%2 == 1 {
+		copy(tmp, boxes)
+	}
 }
 
 // join merges two boxes that differ in dimension at only. They share no
@@ -200,21 +226,28 @@ func (x byKey) after(k []byte, from int) []int {
 	return positions[sort.SearchInts(positions, from+1):]
 }
 
-// mergePasses merges boxes as ClusterShell's RangeSetND does.
+// mergePasses merges boxes of one host each as ClusterShell's RangeSetND
+// does. The boxes are sorted before every pass, but for a full pass that
+// follows a linear one that merged nothing, which leaves them sorted.
 func (sp *ndSpace) mergePasses(boxes []box) []box {
+	sp.sortUnits(boxes)
 	full := false
-	for changed := true; changed; {
-		slices.SortFunc(boxes, sp.compare)
+	for {
+		var changed bool
 		if full {
 			boxes, changed = fullPass(boxes)
 		} else {
 			boxes, changed = linearPass(boxes)
-			if !changed {
-				changed, full = true, true
-			}
 		}
+		if !changed {
+			if full {
+				return boxes
+			}
+			full = true
+			continue
+		}
+		slices.SortFunc(boxes, sp.compare)
 	}
-	return boxes
 }
 
 // linearPass merges each box with the boxes that follow it, for as long as
