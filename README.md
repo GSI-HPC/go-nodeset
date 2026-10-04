@@ -10,7 +10,8 @@
 node sets for Go.** Parse, fold and expand ranges and steps
 (`exe[0001-0010/2]`), several numeric dimensions (`rack[1-2]node[01-04]`),
 the set operators `,` `!` `&` `^`, and `@group` references through a
-resolver of your own. Print sets folded, or as host lists that
+resolver of your own, which may look up the groups of an expression at
+once. Print sets folded, or as host lists that
 [Slurm](https://slurm.schedmd.com/) accepts. The standard library is its
 only dependency.
 

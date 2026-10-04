@@ -6,6 +6,7 @@ package nodeset
 import (
 	"cmp"
 	"fmt"
+	"slices"
 	"sort"
 	"strings"
 	"unicode"
@@ -25,6 +26,9 @@ const maxGroupDepth = 16
 // source that means, the default one or a search of several, is the
 // resolver's to decide. A bare @group inside a group of a named source is
 // passed on with that source, as ClusterShell resolves it.
+//
+// A resolver whose every lookup is a round trip can also implement
+// BatchResolver, and be asked for the groups of an expression at once.
 type Resolver interface {
 	// Resolve returns the expression a group names; an empty group returns
 	// an empty expression. What an unknown group means is the resolver's to
@@ -52,6 +56,58 @@ type Lister interface {
 	DefaultSource() string
 }
 
+// BatchResolver is implemented by a Resolver that can look up several groups
+// at once, as one backed by a command, a directory or a remote service would
+// rather do than make one round trip after the other.
+//
+// Before ParseWith evaluates an expression, the one it is given or one a
+// group answers with, it asks ResolveBatch for the groups the expression
+// refers to that it has not looked up yet, when there are at least two. The
+// evaluation takes each group's answer from there, and asks Resolve for a
+// group that got none. Within one call of ParseWith, a group that has been
+// answered, failure included, is not asked for again; keeping answers from
+// one call to the next is the resolver's to do. All is asked as before.
+//
+// An expression names the same hosts, and fails with the same error, as it
+// does through Resolve alone: an answer's error is reported when the
+// evaluation reaches that group. An expression that fails may have had
+// groups looked up that its evaluation did not reach. Which groups are asked
+// for together is not part of the API, any more than speed is.
+//
+// The package starts no goroutines: whether the groups are looked up in
+// parallel, in one request or from a cache is the resolver's to decide.
+type BatchResolver interface {
+	Resolver
+	// ResolveBatch returns, in the order of refs, what Resolve returns for
+	// each. A reference has the source Resolve would be given for it, refs
+	// holds none twice, and holds neither @* nor @source:*, which All
+	// answers. A shorter slice, or nil, leaves the groups without an
+	// answer to Resolve, as for a lookup that was cut short.
+	ResolveBatch(refs []GroupRef) []GroupAnswer
+}
+
+// GroupRef is a group reference: @Source:Group, or @Group when Source is
+// empty.
+type GroupRef struct {
+	Source, Group string
+}
+
+// GroupAnswer is what a resolver answers for a group: the expression it
+// names, or the error that stopped the lookup.
+type GroupAnswer struct {
+	Expr string
+	Err  error
+}
+
+// groupRef reads a reference written without its @: the source is what
+// comes before the first colon, if there is one.
+func groupRef(ref string) GroupRef {
+	if source, group, ok := strings.Cut(ref, ":"); ok {
+		return GroupRef{Source: source, Group: group}
+	}
+	return GroupRef{Group: ref}
+}
+
 // resolveGroup evaluates one @reference.
 func resolveGroup(ref string, res Resolver, depth int, b *budget) (*NodeSet, error) {
 	if res == nil {
@@ -60,10 +116,8 @@ func resolveGroup(ref string, res Resolver, depth int, b *budget) (*NodeSet, err
 	// The source is passed on exactly as written, empty included, so that a
 	// resolver backed by several sources can search them all for a bare
 	// @group reference rather than being limited to its default.
-	source, group := "", ref
-	if before, after, ok := strings.Cut(ref, ":"); ok {
-		source, group = before, after
-	}
+	r := groupRef(ref)
+	source, group := r.Source, r.Group
 
 	var (
 		expr string
@@ -103,6 +157,70 @@ func (r inSource) Resolve(source, group string) (string, error) {
 
 func (r inSource) All(source string) (string, error) {
 	return r.Resolver.All(cmp.Or(source, r.source))
+}
+
+// batch looks up the groups of an expression at once through a
+// BatchResolver, before the expression is evaluated, and answers the
+// evaluation from what it found. ParseWith makes one for each call, so that
+// answers are kept for one parse.
+type batch struct {
+	BatchResolver
+	answers map[GroupRef]GroupAnswer
+}
+
+// Resolve implements Resolver from what lookUp found, and otherwise asks the
+// resolver and keeps its answer, so that a group answered is not asked for
+// again.
+func (bt *batch) Resolve(source, group string) (string, error) {
+	ref := GroupRef{Source: source, Group: group}
+	a, ok := bt.answers[ref]
+	if !ok {
+		a.Expr, a.Err = bt.BatchResolver.Resolve(source, group)
+		bt.answers[ref] = a
+	}
+	return a.Expr, a.Err
+}
+
+// lookUp asks ResolveBatch for the groups expr refers to that have no answer
+// yet, when there are at least two, reading the terms as the evaluation
+// reads them. A bare reference is looked up in source, as inSource resolves
+// it. An expression with a syntax error has only the groups before the
+// error looked up, since its evaluation reaches none after it, and the
+// evaluation reports the error.
+func (bt *batch) lookUp(expr, source string) {
+	var refs []GroupRef
+	seen := make(map[GroupRef]bool)
+	_ = splitTerms(expr, func(_ operator, term string) error {
+		if term[0] != '@' {
+			return nil
+		}
+		ref := groupRef(term[1:])
+		ref.Source = cmp.Or(ref.Source, source)
+		if _, answered := bt.answers[ref]; !answered && ref.Group != "*" && !seen[ref] {
+			seen[ref] = true
+			refs = append(refs, ref)
+		}
+		return nil
+	})
+	if len(refs) < 2 {
+		return
+	}
+	// The resolver may keep or reorder the slice it is given.
+	answers := bt.ResolveBatch(slices.Clone(refs))
+	for i, a := range answers[:min(len(answers), len(refs))] {
+		bt.answers[refs[i]] = a
+	}
+}
+
+// batchOf returns the batch res looks up groups through, if it has one, and
+// the source in which a bare reference is looked up.
+func batchOf(res Resolver) (*batch, string) {
+	source := ""
+	if in, ok := res.(inSource); ok {
+		res, source = in.Resolver, in.source
+	}
+	bt, _ := res.(*batch)
+	return bt, source
 }
 
 // MapResolver resolves groups from an in-memory table, such as groups a

@@ -30,12 +30,14 @@ release breaks no API, expression or output (see Compatibility).
 - `fold.go`: folding into `String()` and `Hostlist()`, the fold a set keeps,
   and the order `Expand` lists hosts in; `foldnd.go`: folding names with
   several numbers as ClusterShell does.
-- `resolver.go`: `Resolver`, the optional `Lister`, and `MapResolver`.
+- `resolver.go`: `Resolver`, the optional `Lister` and `BatchResolver`, and
+  `MapResolver`.
 - `*_test.go`: unit tests (`nodeset_test.go`), the ClusterShell corpus
-  (`clustershell_test.go`), `FuzzParseFold` (`fuzz_test.go`), the nD fold
-  against a transcription of ClusterShell's (`foldnd_test.go`), the examples
-  (`example_test.go`), and `export_test.go`, which lets tests lower the
-  limits.
+  (`clustershell_test.go`), `FuzzParseFold` and `FuzzParseBatch`
+  (`fuzz_test.go`), the nD fold against a transcription of ClusterShell's
+  (`foldnd_test.go`), the examples (`example_test.go`, and
+  `example_batch_test.go`, which pkg.go.dev shows whole), and
+  `export_test.go`, which lets tests lower the limits.
 - `testdata/`: the ClusterShell corpus, `clustershell.txt`;
   `clustershell.py`, which records ClusterShell's answers;
   `clustershell_oracle.py`, which answers `TestClusterShellOracle`
@@ -61,7 +63,7 @@ make lint             # golangci-lint v2 (.golangci.yml, gofmt + goimports)
 make test             # go test -race ./...
 make floor            # vet and test with the go line of go.mod
 make cover            # go-test-coverage: every file at 100% (.testcoverage.yml)
-make fuzz             # FuzzParseFold for 90 s, as CI runs it (FUZZTIME=10m for longer)
+make fuzz             # FuzzParseFold and FuzzParseBatch for 90 s each, as CI runs them (FUZZTIME=10m for longer)
 make clustershell     # compare with ClusterShell itself, record the corpus again (needs python3; CLUSTERSHELL_CASES=)
 make tidy             # go mod tidy, and fail if go.mod requires anything
 make vuln             # govulncheck

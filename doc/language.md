@@ -200,6 +200,16 @@ so a group may refer to other groups. Nesting is cut off after sixteen levels,
 which also reports a cycle rather than looping. The hosts of every group an
 expression refers to count towards its [limits](#limits).
 
+A resolver whose every lookup is a round trip, to a command, a directory or
+a service, can also implement `BatchResolver`. Before an expression is
+evaluated, the one parsed or one a group answers with, the groups it refers
+to are then asked for at once, when there are at least two, and the
+evaluation takes their answers. Within one parse, a group that has been
+answered is not asked for again. The expression names the same hosts, and
+fails with the same error, as through `Resolve` alone, but one that fails
+may have had groups looked up that its evaluation did not reach
+([decision 13](decisions.md#13-a-resolver-may-look-up-the-groups-of-an-expression-at-once)).
+
 A bare `@group` inside a group of a named source is looked up in that
 source, as ClusterShell does: a group of source `ib` that refers to `@fabric`
 means `@ib:fabric`. A bare `@group` anywhere else is handed to the resolver

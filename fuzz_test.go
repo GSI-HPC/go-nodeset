@@ -60,3 +60,19 @@ func FuzzParseFold(f *testing.F) {
 		}
 	})
 }
+
+// FuzzParseBatch holds a BatchResolver to Resolve: whether the groups of an
+// expression are looked up at once or one after the other, it names the
+// same hosts, or fails with the same error.
+func FuzzParseBatch(f *testing.F) {
+	nodeset.LowerLimits(f, 1<<12)
+	for _, s := range batchSeeds {
+		f.Add(s)
+	}
+	f.Fuzz(func(t *testing.T, expr string) {
+		if len(expr) > 1<<10 {
+			return
+		}
+		batchAgrees(t, expr)
+	})
+}
