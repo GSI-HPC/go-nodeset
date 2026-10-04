@@ -468,6 +468,24 @@ func TestAllEvaluatesEachGroupOnItsOwn(t *testing.T) {
 		}
 	})
 
+	// A group whose brackets do not balance is evaluated on its own too, and
+	// so is an error, where it took the comma and the next group into its
+	// range: exe[1 and 3] were exe[1,3] together.
+	t.Run("unbalanced brackets", func(t *testing.T) {
+		t.Parallel()
+		res := nodeset.NewMapResolver("local", map[string]string{"a": "exe[1", "b": "3]", "c": "exe7"})
+		allIs(t, res, "local", "@local:a,@local:b,exe7")
+		for _, expr := range []string{"@*", "@local:*"} {
+			if ns, err := nodeset.ParseWith(expr, res); err == nil {
+				t.Errorf("ParseWith(%q) = %q, want the unbalanced group refused", expr, ns)
+			}
+		}
+		odd := nodeset.NewMapResolver("local", map[string]string{"a b": "exe[1", "c": "3]"})
+		if got, err := odd.All("local"); err == nil {
+			t.Errorf("All(%q) = %q, want the group %q refused", "local", got, "a b")
+		}
+	})
+
 	// A source without a name is referred to as @:group, which reads back
 	// as that source.
 	t.Run("unnamed source", func(t *testing.T) {

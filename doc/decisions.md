@@ -19,7 +19,8 @@ edited: a later one supersedes it, and the earlier one's status names it.
 | [8](#8-a-set-keeps-its-ranges-and-its-fold) | A set keeps its ranges and its fold | accepted, extended by [9](#9-operators-combine-ranges-where-the-result-is-ranges) |
 | [9](#9-operators-combine-ranges-where-the-result-is-ranges) | Operators combine ranges where the result is ranges | accepted |
 | [10](#10-the-first-release-is-v100) | The first release is v1.0.0 | accepted |
-| [11](#11-mapresolver-evaluates-every-group-of-a-source-on-its-own) | MapResolver evaluates every group of a source on its own | accepted |
+| [11](#11-mapresolver-evaluates-every-group-of-a-source-on-its-own) | MapResolver evaluates every group of a source on its own | accepted, in part superseded by [12](#12-a-group-with-unbalanced-brackets-is-evaluated-on-its-own-too) |
+| [12](#12-a-group-with-unbalanced-brackets-is-evaluated-on-its-own-too) | A group with unbalanced brackets is evaluated on its own too | accepted |
 
 ## 1. Apache-2.0, and GSI holds the copyright
 
@@ -496,7 +497,8 @@ maintainer chose v1.0.0 for the first release.
 
 ## 11. MapResolver evaluates every group of a source on its own
 
-Status: accepted
+Status: accepted, in part superseded by
+[decision 12](#12-a-group-with-unbalanced-brackets-is-evaluated-on-its-own-too)
 
 ### Context
 
@@ -545,3 +547,36 @@ and fixed it there.
   ClusterShell what `All` returns as the source's `all` group, as
   `TestClusterShellOracle` does.
 - No test compares the package with ClusterShell's fallback.
+
+## 12. A group with unbalanced brackets is evaluated on its own too
+
+Status: accepted
+
+### Context
+
+Decision 11 has `MapResolver.All` write a group into the union as its
+expression when that holds no operator but the union. A group whose
+brackets do not balance then takes the comma after it, and the group after
+that, into its range: with the groups `a: exe[1` and `b: 3]`, `@*` named
+`exe[1,3]`, although each group on its own is an error and `MapResolver.All`
+is documented as evaluating each group on its own. v1.0.0 did the same, and
+so does ClusterShell 1.10.1's fallback for a source without an `all` group.
+
+### Decision
+
+- `MapResolver.All` writes a group out as its expression only when that
+  holds no operator but the union and its brackets balance. It refers to
+  any other group as `@source:group`, under the rules decision 11 sets for
+  the reference, so the group is evaluated on its own: `@*` over the groups
+  above is an error, as `@a` and `@b` are.
+- A source whose groups all hold no operator but the union and balance
+  their brackets gives the same expression as before. The rest of decision
+  11 stands.
+- Here the package departs from ClusterShell's fallback as well, and
+  `doc/language.md` says so under Groups.
+
+### Costs
+
+- `@*` and `@source:*` over a source whose groups close each other's
+  brackets named hosts in v1.0.0 and are an error now, and `All` returns
+  another expression for that source.
