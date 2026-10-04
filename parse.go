@@ -47,31 +47,13 @@ const (
 )
 
 // parseExpression evaluates a full node set expression left to right.
-//
-// A comma or whitespace between two operands is a union, and an empty operand
-// of a union is nothing: "a,,b" and "a," are accepted. The other operators
-// need an operand on both sides. "a&" is what a command substitution that
-// printed nothing leaves behind, and evaluating it as "a" would select every
-// host of a instead of none, so it is an error, as it is in ClusterShell.
 func parseExpression(expr string, res Resolver, depth int, b *budget) (*NodeSet, error) {
 	if depth > maxGroupDepth {
 		return nil, fmt.Errorf("group references nested more than %d levels deep", maxGroupDepth)
 	}
 	result := New()
-	op := opUnion
-	// operand reports whether the last thing read was an operand, and
-	// pendingOp whether a set operator is waiting for its right operand.
-	operand, pendingOp := false, false
-	pending := strings.Builder{}
-	depthBracket := 0
-
 	var plain plainName
-	flush := func() error {
-		term := strings.TrimSpace(pending.String())
-		pending.Reset()
-		if term == "" {
-			return nil
-		}
+	err := splitTerms(expr, func(op operator, term string) error {
 		if op == opUnion && term[0] != '@' && strings.IndexByte(term, '[') < 0 {
 			// A name without brackets is one host, added as it is,
 			// without a set of its own.
@@ -84,7 +66,6 @@ func parseExpression(expr string, res Resolver, depth int, b *budget) (*NodeSet,
 			}
 			g.list()
 			g.add(plain.vals, plain.pads)
-			operand, pendingOp = true, false
 			return nil
 		}
 		ts, err := parseTerm(term, res, depth, b)
@@ -99,6 +80,45 @@ func parseExpression(expr string, res Resolver, depth int, b *budget) (*NodeSet,
 		}
 		// The result needs no cap of its own: it holds no more hosts
 		// than its terms named together, which b already caps.
+		return nil
+	})
+	if err != nil {
+		return nil, err
+	}
+	return result, nil
+}
+
+// splitTerms reads an expression term by term, left to right, and hands
+// each term, trimmed and not empty, to each with the operator that joins it
+// to the terms before it.
+//
+// Whitespace and the operators outside brackets end a term. A comma or
+// whitespace between two operands is a union, and an empty operand of a
+// union is nothing: "a,,b" and "a," are accepted. The other operators need
+// an operand on both sides. "a&" is what a command substitution that
+// printed nothing leaves behind, and evaluating it as "a" would select every
+// host of a instead of none, so it is an error, as it is in ClusterShell.
+//
+// It stops at the first error, its own or one each returns, so each is
+// given the terms before a syntax error and none after it.
+func splitTerms(expr string, each func(op operator, term string) error) error {
+	op := opUnion
+	// operand reports whether the last thing read was an operand, and
+	// pendingOp whether a set operator is waiting for its right operand.
+	operand, pendingOp := false, false
+	// start is where the term being read begins.
+	start := 0
+	depthBracket := 0
+
+	flush := func(end int) error {
+		term := strings.TrimSpace(expr[start:end])
+		start = end + 1
+		if term == "" {
+			return nil
+		}
+		if err := each(op, term); err != nil {
+			return err
+		}
 		op, operand, pendingOp = opUnion, true, false
 		return nil
 	}
@@ -108,52 +128,48 @@ func parseExpression(expr string, res Resolver, depth int, b *budget) (*NodeSet,
 		switch {
 		case c == '[':
 			depthBracket++
-			pending.WriteByte(c)
 		case c == ']':
 			depthBracket--
 			if depthBracket < 0 {
-				return nil, fmt.Errorf("unbalanced ] in %q", expr)
+				return fmt.Errorf("unbalanced ] in %q", expr)
 			}
-			pending.WriteByte(c)
 		case depthBracket > 0:
-			pending.WriteByte(c)
+			// Whatever is in brackets belongs to the term.
 		case c == ' ' || c == '\t' || c == '\n' || c == '\r':
-			if err := flush(); err != nil {
-				return nil, err
+			if err := flush(i); err != nil {
+				return err
 			}
 		case c == byte(opUnion):
-			if err := flush(); err != nil {
-				return nil, err
+			if err := flush(i); err != nil {
+				return err
 			}
 			if pendingOp {
-				return nil, missingOperand(expr, op, "right")
+				return missingOperand(expr, op, "right")
 			}
 			operand = false
 		case c == byte(opDifference) || c == byte(opIntersection) || c == byte(opSymmetric):
-			if err := flush(); err != nil {
-				return nil, err
+			if err := flush(i); err != nil {
+				return err
 			}
 			if pendingOp {
-				return nil, missingOperand(expr, op, "right")
+				return missingOperand(expr, op, "right")
 			}
 			if !operand {
-				return nil, missingOperand(expr, operator(c), "left")
+				return missingOperand(expr, operator(c), "left")
 			}
 			op, operand, pendingOp = operator(c), false, true
-		default:
-			pending.WriteByte(c)
 		}
 	}
 	if depthBracket != 0 {
-		return nil, fmt.Errorf("unbalanced [ in %q", expr)
+		return fmt.Errorf("unbalanced [ in %q", expr)
 	}
-	if err := flush(); err != nil {
-		return nil, err
+	if err := flush(len(expr)); err != nil {
+		return err
 	}
 	if pendingOp {
-		return nil, missingOperand(expr, op, "right")
+		return missingOperand(expr, op, "right")
 	}
-	return result, nil
+	return nil
 }
 
 // missingOperand reports an operator written without one of its operands.
