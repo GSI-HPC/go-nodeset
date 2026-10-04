@@ -51,6 +51,10 @@ nodes prints none, and reading it as `@rack:R02` would select the whole rack
 instead of nothing. A union tolerates an empty operand, because a union with nothing is
 what was meant: `exe1,` is `exe1`.
 
+A range needs both its bounds. `exe[1-]` and `exe[1-,5]` are errors: they are
+what `exe[1-$N]` leaves behind when `N` is empty, and reading the first as
+`exe1` would select one host where several were meant.
+
 ## Semantics chosen here
 
 These are the corners where an implementation has to decide something. They are
@@ -144,9 +148,10 @@ and no other:
 | `-oProxyCommand=x` | accepted as a name | an error (leading dash) |
 | `exe[1-2-3]` | the hosts `exe-2` to `exe3` | an error (malformed range) |
 
-Both reject `exe[1-010]`, `exe[001-10]`, a dangling `!`, `&` or `^`, and a set
-operator with no left operand. On the other lines of the corpus both name the
-same hosts. Folded output may still be ordered differently: ClusterShell prints
+Both reject `exe[1-010]`, `exe[001-10]`, a range without its last bound such
+as `exe[1-]` or `exe[1-,5]`, a dangling `!`, `&` or `^`, and a set operator
+with no left operand. On the other lines of the corpus both name the same
+hosts. Folded output may still be ordered differently: ClusterShell prints
 `exe[3,01-02]` where the package prints `exe[01-02,3]`.
 
 Beyond the corpus, a test runs ClusterShell itself over thousands of
