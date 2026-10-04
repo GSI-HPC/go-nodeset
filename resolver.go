@@ -153,9 +153,13 @@ func (m *MapResolver) List(source string) ([]string, error) {
 // All implements Resolver by unioning every group of the source, each
 // evaluated on its own. A group whose expression holds an operator other
 // than the union is referred to as @source:group rather than written out:
-// its operator would otherwise apply to every group before it. A group that
-// would have to be referred to, but whose name or source name cannot be
-// read back as that one reference, is an error.
+// its operator would otherwise apply to every group before it. So is a
+// group whose brackets do not balance, which would otherwise take in the
+// group after it. A group referred to is evaluated one level of nesting
+// deeper than one written out. A group that has to be referred to is an
+// error when its name is empty or *, or holds whitespace, a comma, an
+// operator or a bracket, or when the name of its source holds one of those
+// or a colon, since such a reference might not read back as that group.
 func (m *MapResolver) All(source string) (string, error) {
 	names, err := m.List(source)
 	if err != nil {
@@ -175,19 +179,39 @@ func (m *MapResolver) All(source string) (string, error) {
 }
 
 // unionOperand writes a group's expression as one operand of a union: as
-// it is when it holds no operator but the union, and otherwise as a
-// reference to the group, which the parser evaluates on its own. A name the
-// parser would not read back as that one reference is refused, since such a
-// reference would name other hosts.
+// it is when it holds no operator but the union and its brackets balance,
+// and otherwise as a reference to the group, which the parser evaluates on
+// its own. A group is refused when its name, or its source's, might not
+// read back as that one reference, since such a reference could name other
+// hosts.
 func unionOperand(source, group, expr string) (string, error) {
-	if !strings.ContainsAny(expr, "!&^") {
+	if !strings.ContainsAny(expr, "!&^") && balanced(expr) {
 		return expr, nil
 	}
 	if group == "" || group == "*" || !referable(group) || !referable(source) || strings.Contains(source, ":") {
-		return "", fmt.Errorf("group %q of source %q holds a set operator, and %q might not read back as that group, "+
+		return "", fmt.Errorf("group %q of source %q holds a set operator or an unbalanced bracket, "+
+			"and %q might not read back as that group, "+
 			"so %q cannot evaluate it on its own", group, source, "@"+source+":"+group, "@"+source+":*")
 	}
 	return "@" + source + ":" + group, nil
+}
+
+// balanced reports whether every bracket of an expression is closed, as the
+// parser counts them. A group whose brackets do not balance would otherwise
+// take the comma after it, and the group after that, into its range.
+func balanced(expr string) bool {
+	depth := 0
+	for i := 0; i < len(expr); i++ {
+		switch expr[i] {
+		case '[':
+			depth++
+		case ']':
+			if depth--; depth < 0 {
+				return false
+			}
+		}
+	}
+	return depth == 0
 }
 
 // referable reports whether a name is free of what the parser splits a term

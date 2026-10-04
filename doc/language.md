@@ -161,7 +161,8 @@ them folded character for character alike, and list them in the same order.
 
 The corpus holds no groups. `@*` over a source of `MapResolver` differs from
 what ClusterShell gives for a source without an `all` group when a group
-holds `!`, `&` or `^`, as [Groups](#groups) says.
+holds `!`, `&` or `^`, or its brackets do not balance, as [Groups](#groups)
+says.
 
 With several numbers in a name there is more than one way to fold a set. The
 package folds it the way ClusterShell does: a set that is the product of its
@@ -182,13 +183,17 @@ The resolver answers `@*` with one expression, which is evaluated left to
 right like any other, so a resolver that joins the expressions of several
 groups keeps each group's operators to that group. `MapResolver` gives the
 union of the source's groups, each evaluated on its own, as `@a,@b` evaluates
-them: a group whose expression holds `!`, `&` or `^` goes in as the reference
-`@source:group`, and a name that would not read back as that one reference,
-such as one holding a space, a comma, one of those operators or a bracket, is
-an error. Here ClusterShell differs: for a source without an `all` group it
-joins the groups' expressions into one, so with `a: exe1` and
-`b: exe[2-4]!exe1` its `@*` is `exe[2-4]`, where the package's is `exe[1-4]`
-([decision 11](decisions.md#11-mapresolver-evaluates-every-group-of-a-source-on-its-own)).
+them: a group whose expression holds `!`, `&` or `^`, or whose brackets do
+not balance, goes in as the reference `@source:group`, one level of nesting
+deeper. Such a group is an error when its name is empty or `*`, or holds
+whitespace, a comma, one of those operators or a bracket, or when its
+source's name holds one of those or `:`, since that reference might not read
+back as the group. Here ClusterShell differs: for a source without an `all`
+group it joins the groups' expressions into one, so with `a: exe1` and
+`b: exe[2-4]!exe1` its `@*` is `exe[2-4]`, where the package's is `exe[1-4]`,
+and with `a: exe[1` and `b: 3]` it is `exe[1,3]`, where the package's is an
+error ([decision 11](decisions.md#11-mapresolver-evaluates-every-group-of-a-source-on-its-own),
+[decision 12](decisions.md#12-a-group-with-unbalanced-brackets-is-evaluated-on-its-own-too)).
 
 The expression a resolver returns is parsed in turn, with the same resolver,
 so a group may refer to other groups. Nesting is cut off after sixteen levels,
