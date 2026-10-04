@@ -21,6 +21,7 @@
 // to right. Whitespace acts as a union operator, so the arguments of a command
 // line may be joined with a space and parsed in one call. The operators !, &
 // and ^ need an operand on each side: "exe[1-10]&" is an error, not exe[1-10].
+// A range needs both its bounds: "exe[1-]" is an error, not exe1.
 //
 // # Node names
 //
