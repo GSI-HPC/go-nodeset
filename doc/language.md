@@ -159,6 +159,10 @@ generated expressions ([testing.md](testing.md#what-is-tested-where)). Apart
 from the rows above, both name the same hosts for every one of them, print
 them folded character for character alike, and list them in the same order.
 
+The corpus holds no groups. `@*` over a source of `MapResolver` differs from
+what ClusterShell gives for a source without an `all` group when a group
+holds `!`, `&` or `^`, as [Groups](#groups) says.
+
 With several numbers in a name there is more than one way to fold a set. The
 package folds it the way ClusterShell does: a set that is the product of its
 dimensions is one vector, and any other set is merged from its hosts in
@@ -173,6 +177,18 @@ supplies; parsing without one rejects every group reference. The source is
 handed over as it was written, empty for a bare `@group`, so the resolver
 decides what that means: its default source, or a search of several. `@*` and
 `@source:*` ask it for every host of a source.
+
+The resolver answers `@*` with one expression, which is evaluated left to
+right like any other, so a resolver that joins the expressions of several
+groups keeps each group's operators to that group. `MapResolver` gives the
+union of the source's groups, each evaluated on its own, as `@a,@b` evaluates
+them: a group whose expression holds `!`, `&` or `^` goes in as the reference
+`@source:group`, and a name that would not read back as that one reference,
+such as one holding a space, a comma, one of those operators or a bracket, is
+an error. Here ClusterShell differs: for a source without an `all` group it
+joins the groups' expressions into one, so with `a: exe1` and
+`b: exe[2-4]!exe1` its `@*` is `exe[2-4]`, where the package's is `exe[1-4]`
+([decision 11](decisions.md#11-mapresolver-evaluates-every-group-of-a-source-on-its-own)).
 
 The expression a resolver returns is parsed in turn, with the same resolver,
 so a group may refer to other groups. Nesting is cut off after sixteen levels,

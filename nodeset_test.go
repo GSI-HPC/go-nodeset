@@ -405,6 +405,110 @@ func TestGroups(t *testing.T) {
 	}
 }
 
+// @* names what the groups of the source name together, each evaluated on
+// its own, as @a,@b does. All joined the groups' expressions into one, so
+// the operator in one applied to every group before it: with a: exe1 and
+// b: exe[2-4]!exe1, @* gave exe[2-4] where @a,@b gave exe[1-4].
+func TestAllEvaluatesEachGroupOnItsOwn(t *testing.T) {
+	t.Parallel()
+
+	parsesTo := func(t *testing.T, res nodeset.Resolver, expr, want string) {
+		t.Helper()
+		ns, err := nodeset.ParseWith(expr, res)
+		if err != nil {
+			t.Errorf("ParseWith(%q) failed: %v", expr, err)
+			return
+		}
+		if got := ns.String(); got != want {
+			t.Errorf("ParseWith(%q) = %q, want %q", expr, got, want)
+		}
+	}
+	allIs := func(t *testing.T, res *nodeset.MapResolver, source, want string) {
+		t.Helper()
+		got, err := res.All(source)
+		if err != nil {
+			t.Errorf("All(%q) failed: %v", source, err)
+			return
+		}
+		if got != want {
+			t.Errorf("All(%q) = %q, want %q", source, got, want)
+		}
+	}
+
+	t.Run("reproduction", func(t *testing.T) {
+		t.Parallel()
+		res := &nodeset.MapResolver{Default: "local", Groups: map[string]map[string]string{
+			"local": {"a": "exe1", "b": "exe[2-4]!exe1"},
+		}}
+		allIs(t, res, "local", "exe1,@local:b")
+		for _, expr := range []string{"@*", "@local:*", "@a,@b"} {
+			parsesTo(t, res, expr, "exe[1-4]")
+		}
+	})
+
+	t.Run("several sources", func(t *testing.T) {
+		t.Parallel()
+		res := &nodeset.MapResolver{
+			Groups: map[string]map[string]string{
+				"local": {"a": "exe[1-2]", "b": "exe[3-4]!exe2", "c": "exe[5-6]&exe[6-7]", "d": "sub1"},
+				"other": {"x": "exe[8-9]", "y": "exe[7-9]^exe[8-9]"},
+			},
+			Default: "local",
+		}
+		for expr, want := range map[string]string{
+			"@*":          "exe[1-4,6],sub1",
+			"@local:*":    "exe[1-4,6],sub1",
+			"@a,@b,@c":    "exe[1-4,6]",
+			"@other:*":    "exe[7-9]",
+			"@*!exe3":     "exe[1-2,4,6],sub1",
+			"exe0,@*":     "exe[0-4,6],sub1",
+			"@other:*,@*": "exe[1-4,6-9],sub1",
+		} {
+			parsesTo(t, res, expr, want)
+		}
+	})
+
+	// A source without a name is referred to as @:group, which reads back
+	// as that source.
+	t.Run("unnamed source", func(t *testing.T) {
+		t.Parallel()
+		res := &nodeset.MapResolver{Groups: map[string]map[string]string{
+			"": {"a": "exe1", "b": "exe[2-4]!exe1"},
+		}}
+		allIs(t, res, "", "exe1,@:b")
+		parsesTo(t, res, "@*", "exe[1-4]")
+	})
+
+	// A source whose groups hold no operator but the union is joined as
+	// written, as it always was, whatever the names of its groups.
+	t.Run("no operators", func(t *testing.T) {
+		t.Parallel()
+		res := nodeset.NewMapResolver("lo:cal", map[string]string{"a": "exe[1-2]", "b c": "sub1,sub2", "*": "login"})
+		allIs(t, res, "", "login,exe[1-2],sub1,sub2")
+		parsesTo(t, res, "@*", "exe[1-2],login,sub[1-2]")
+	})
+
+	// A group that has to be evaluated on its own is referred to by its
+	// name, so a name that does not read back as that one reference is
+	// refused rather than evaluated with its neighbours.
+	for _, tc := range []struct{ source, group string }{
+		{"local", ""}, {"local", "*"}, {"local", "b c"}, {"local", "b\tc"},
+		{"local", "b,c"}, {"local", "b!c"}, {"local", "b&c"}, {"local", "b^c"},
+		{"local", "b[1]"}, {"lo:cal", "b"}, {"lo cal", "b"}, {"lo,cal", "b"},
+	} {
+		t.Run(fmt.Sprintf("refused %q:%q", tc.source, tc.group), func(t *testing.T) {
+			t.Parallel()
+			res := nodeset.NewMapResolver(tc.source, map[string]string{"a": "exe1", tc.group: "exe[1-3]!exe2"})
+			if got, err := res.All(tc.source); err == nil {
+				t.Errorf("All(%q) = %q, want the group %q refused", tc.source, got, tc.group)
+			}
+			if ns, err := nodeset.ParseWith("@*", res); err == nil {
+				t.Errorf("ParseWith(\"@*\") = %q, want the group %q refused", ns, tc.group)
+			}
+		})
+	}
+}
+
 func TestGroupErrors(t *testing.T) {
 	t.Parallel()
 
