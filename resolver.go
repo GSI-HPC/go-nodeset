@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"sort"
 	"strings"
+	"unicode"
 )
 
 // maxGroupDepth bounds how deeply groups may reference other groups, which
@@ -176,19 +177,29 @@ func (m *MapResolver) All(source string) (string, error) {
 // unionOperand writes a group's expression as one operand of a union: as
 // it is when it holds no operator but the union, and otherwise as a
 // reference to the group, which the parser evaluates on its own. A name the
-// parser would not read back as that one reference is refused, since a
-// reference split at a comma or a space would name other hosts.
+// parser would not read back as that one reference is refused, since such a
+// reference would name other hosts.
 func unionOperand(source, group, expr string) (string, error) {
 	if !strings.ContainsAny(expr, "!&^") {
 		return expr, nil
 	}
-	const splits = " \t\r\n,!&^[]"
-	if group == "" || group == "*" || strings.ContainsAny(group, splits) ||
-		strings.ContainsAny(source, splits+":") {
-		return "", fmt.Errorf("group %q of source %q holds a set operator and cannot be referred to by its name, "+
-			"so @%s:* cannot evaluate it on its own", group, source, source)
+	if group == "" || group == "*" || !referable(group) || !referable(source) || strings.Contains(source, ":") {
+		return "", fmt.Errorf("group %q of source %q holds a set operator, and %q might not read back as that group, "+
+			"so %q cannot evaluate it on its own", group, source, "@"+source+":"+group, "@"+source+":*")
 	}
 	return "@" + source + ":" + group, nil
+}
+
+// referable reports whether a name is free of what the parser splits a term
+// at, or trims from it: whitespace of any kind, a comma, an operator and a
+// bracket. A group named "a" followed by a no-break space would be read back
+// as the group "a". Some of the names it refuses would read back, such as
+// one holding a pair of brackets; they are refused all the same, as
+// decision 11 in doc/decisions.md says.
+func referable(name string) bool {
+	return !strings.ContainsFunc(name, func(r rune) bool {
+		return unicode.IsSpace(r) || strings.ContainsRune(",!&^[]", r)
+	})
 }
 
 // DefaultSource implements Lister.

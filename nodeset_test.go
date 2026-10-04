@@ -495,6 +495,11 @@ func TestAllEvaluatesEachGroupOnItsOwn(t *testing.T) {
 		{"local", ""}, {"local", "*"}, {"local", "b c"}, {"local", "b\tc"},
 		{"local", "b,c"}, {"local", "b!c"}, {"local", "b&c"}, {"local", "b^c"},
 		{"local", "b[1]"}, {"lo:cal", "b"}, {"lo cal", "b"}, {"lo,cal", "b"},
+		// Any Unicode space is refused, as a space is: the parser trims
+		// them from the ends of a term, so @local:b followed by a no-break
+		// space would name the group b.
+		{"local", "b\u00a0"}, {"local", "b\v"}, {"local", "b\f"}, {"local", "b\u0085"},
+		{"local", "b\u2003c"}, {"lo\u00a0cal", "b"},
 	} {
 		t.Run(fmt.Sprintf("refused %q:%q", tc.source, tc.group), func(t *testing.T) {
 			t.Parallel()
