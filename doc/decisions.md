@@ -19,6 +19,7 @@ edited: a later one supersedes it, and the earlier one's status names it.
 | [8](#8-a-set-keeps-its-ranges-and-its-fold) | A set keeps its ranges and its fold | accepted, extended by [9](#9-operators-combine-ranges-where-the-result-is-ranges) |
 | [9](#9-operators-combine-ranges-where-the-result-is-ranges) | Operators combine ranges where the result is ranges | accepted |
 | [10](#10-the-first-release-is-v100) | The first release is v1.0.0 | accepted |
+| [11](#11-mapresolver-evaluates-every-group-of-a-source-on-its-own) | MapResolver evaluates every group of a source on its own | accepted |
 
 ## 1. Apache-2.0, and GSI holds the copyright
 
@@ -492,3 +493,55 @@ maintainer chose v1.0.0 for the first release.
   of this package, so it waits for a major version, or is listed in
   `doc/language.md` as a divergence until then.
 - A v2 changes the import path of every program that moves to it.
+
+## 11. MapResolver evaluates every group of a source on its own
+
+Status: accepted
+
+### Context
+
+`@source:*`, and `@*` for the default source, asks the resolver's `All` for
+one expression, which the parser evaluates left to right like any other.
+`MapResolver.All` joined the expressions of the source's groups with
+commas, so an operator inside one group applied to every group joined
+before it. With the groups `a: exe1` and `b: exe[2-4]!exe1`, `@*` named
+`exe[2-4]` where `@a,@b` named `exe[1-4]`, although `Resolver` documents
+`All` as naming every host the source knows.
+
+ClusterShell 1.10.1 does the same for a source without an `all` group,
+such as a YAML group file without one: it joins the groups' expressions
+with commas and parses the result as one, so `nodeset -f '@*'` over that
+file prints `exe[2-4]`. clusterctl met the bug in its copy of the engine
+and fixed it there.
+
+### Decision
+
+- `MapResolver.All` writes a group into the union as its expression when
+  that holds no operator but the union, and otherwise as the reference
+  `@source:group`, which the parser evaluates on its own, at one more level
+  of nesting. A source without such a group gives the same expression as
+  before.
+- A group that has to be referred to, but whose name the parser would not
+  read back as that one reference, makes `All` an error rather than a
+  guess: a name that is empty or `*`, or holds whitespace, a comma, `!`,
+  `&`, `^` or a bracket, or a source name that holds one of those
+  characters or `:`. An empty source name reads back as `@:group`.
+- The doc of `Resolver.All` says that its expression is evaluated as one,
+  so that another resolver that joins groups keeps each group's operators
+  to that group.
+- Here the package departs from ClusterShell: `@*` names what `Resolver`
+  documents, the hosts of every group, rather than what ClusterShell's
+  fallback for a source without `all` gives. `doc/language.md` says so
+  under Groups; the corpus holds no groups, so its table of divergences
+  cannot.
+
+### Costs
+
+- `@*` and `@source:*` over a `MapResolver` source with such a group name
+  other hosts than they did in v1.0.0, and `All` returns another
+  expression for that source, or an error.
+- A program that reads one table of groups with both the package and
+  ClusterShell gets different hosts for `@*` from the two, unless it gives
+  ClusterShell what `All` returns as the source's `all` group, as
+  `TestClusterShellOracle` does.
+- No test compares the package with ClusterShell's fallback.

@@ -59,8 +59,11 @@ Both must reject the same expressions and name the same hosts, and each must
 read what the other prints, the host list included, as the same hosts;
 `String` must be ClusterShell's folded form and `Expand` must list the hosts
 in ClusterShell's order. The groups refer to groups of their own source bare,
-and the generated expressions include groups the sources do not hold. They
-stay out of the differences
+and the generated expressions include groups the sources do not hold.
+ClusterShell is given what `MapResolver.All` returns as each source's `all`
+group, so the two evaluate `@*` alike; how ClusterShell evaluates a source
+without one differs, as [language.md](language.md#groups) says. The
+expressions stay out of the differences
 [language.md](language.md#where-this-differs-from-clustershell) lists: each
 number of a name has one width in every expression.
 
