@@ -4,6 +4,7 @@
 package nodeset_test
 
 import (
+	"errors"
 	"fmt"
 	"runtime"
 	"slices"
@@ -592,6 +593,243 @@ func TestMapResolverLists(t *testing.T) {
 	}
 	if _, err := res.List("other"); err == nil {
 		t.Error("List of an unknown source should fail")
+	}
+}
+
+var _ nodeset.BatchResolver = (*batchResolver)(nil)
+
+// batchResolver is a MapResolver that can look up several groups at once.
+// It records how it is asked: "batch" and the references a ResolveBatch is
+// given, "resolve" and the reference a Resolve is given, and "all" and the
+// source an All is given.
+type batchResolver struct {
+	*nodeset.MapResolver
+	// failing are groups whose lookup fails.
+	failing map[string]bool
+	asked   []string
+}
+
+func newBatchResolver() *batchResolver {
+	return &batchResolver{
+		MapResolver: &nodeset.MapResolver{Default: "site", Groups: map[string]map[string]string{
+			"site": {
+				"a": "n[1-2]", "b": "@c,@rack:d", "c": "n3", "e": "n[1-5]!@a",
+				"lost": "@gone,n9", "gone": "n8", "loop": "@a,@loop",
+			},
+			"rack": {"d": "n4", "r1": "n[1-4]", "r2": "@d,@r1", "r3": "@:d,@site:c"},
+		}},
+		failing: map[string]bool{"gone": true},
+	}
+}
+
+func (r *batchResolver) lookup(source, group string) (string, error) {
+	if r.failing[group] {
+		return "", errors.New("the source did not answer")
+	}
+	return r.MapResolver.Resolve(source, group)
+}
+
+func (r *batchResolver) Resolve(source, group string) (string, error) {
+	r.asked = append(r.asked, "resolve "+source+":"+group)
+	return r.lookup(source, group)
+}
+
+func (r *batchResolver) All(source string) (string, error) {
+	r.asked = append(r.asked, "all "+source)
+	return r.MapResolver.All(source)
+}
+
+func (r *batchResolver) ResolveBatch(refs []nodeset.GroupRef) []nodeset.GroupAnswer {
+	asked := "batch"
+	answers := make([]nodeset.GroupAnswer, len(refs))
+	for i, ref := range refs {
+		asked += " " + ref.Source + ":" + ref.Group
+		answers[i].Expr, answers[i].Err = r.lookup(ref.Source, ref.Group)
+	}
+	r.asked = append(r.asked, asked)
+	return answers
+}
+
+// The groups of an expression were looked up one after the other, each a
+// round trip when the source runs a command or asks a service. A
+// BatchResolver is given the groups of each expression together, before it
+// is evaluated, and the evaluation takes their answers without asking
+// again.
+func TestBatchResolverLooksUpTheGroupsOfAnExpressionAtOnce(t *testing.T) {
+	t.Parallel()
+	for _, tc := range []struct {
+		expr, want string
+		asked      []string
+	}{
+		// The groups of the expression, then those of b's answer. e's
+		// answer refers to a, which has been looked up.
+		{"@a,@b!n1 @rack:r1&@e", "n[3-4]", []string{"batch :a :b rack:r1 :e", "batch :c rack:d"}},
+		// A bare reference inside a group of a named source is looked up
+		// in that source, as Resolve would be asked for it.
+		{"@rack:r2", "n[1-4]", []string{"resolve rack:r2", "batch rack:d rack:r1"}},
+		{"@rack:r3", "n[3-4]", []string{"resolve rack:r3", "batch rack:d site:c"}},
+		{"@b,@rack:r3", "n[3-4]", []string{"batch :b rack:r3", "batch :c rack:d", "resolve site:c"}},
+		// All answers @rack:* as before, and the groups its answer refers
+		// to are looked up together.
+		{"@rack:*", "n[1-4]", []string{"all rack", "batch rack:d rack:r1 site:c"}},
+		// An expression that refers to one group asks Resolve, as before.
+		{"@a,n7", "n[1-2,7]", []string{"resolve :a"}},
+		// A group is looked up once, however often it is referred to.
+		{"@a,@c,@a @c", "n[1-3]", []string{"batch :a :c"}},
+		{"@a,@a", "n[1-2]", []string{"resolve :a"}},
+		// An expression with a syntax error has the groups before the
+		// error looked up, which its evaluation reaches, and none after.
+		{"@a,@c,]@e,@b", "", []string{"batch :a :c"}},
+	} {
+		res := newBatchResolver()
+		ns, err := nodeset.ParseWith(tc.expr, res)
+		switch {
+		case tc.want == "" && err == nil:
+			t.Errorf("ParseWith(%q) = %s, want an error", tc.expr, ns)
+		case tc.want != "" && err != nil:
+			t.Errorf("ParseWith(%q) failed: %v", tc.expr, err)
+		case tc.want != "" && ns.String() != tc.want:
+			t.Errorf("ParseWith(%q) = %s, want %s", tc.expr, ns, tc.want)
+		}
+		if !slices.Equal(res.asked, tc.asked) {
+			t.Errorf("ParseWith(%q) asked %q, want %q", tc.expr, res.asked, tc.asked)
+		}
+	}
+}
+
+// A lookup that failed is the answer the evaluation reports when it reaches
+// the group, so the error is the one Resolve alone would give, and the
+// group is not looked up again.
+func TestBatchResolverFailuresAreReportedWhereReached(t *testing.T) {
+	t.Parallel()
+	for _, tc := range []struct {
+		expr, err string
+		asked     []string
+	}{
+		{"@a,@gone", "group @gone: the source did not answer", []string{"batch :a :gone"}},
+		{"@gone,@x:a", "group @gone: the source did not answer", []string{"batch :gone x:a"}},
+		{"@x:a,@gone", `group @x:a: unknown group source "x"`, []string{"batch x:a :gone"}},
+		// The depth limit still reports a cycle, with each group of it
+		// looked up once.
+		{"@loop", "nested more than 16 levels", []string{"resolve :loop", "resolve :a"}},
+	} {
+		res := newBatchResolver()
+		_, err := nodeset.ParseWith(tc.expr, res)
+		if err == nil || !strings.Contains(err.Error(), tc.err) {
+			t.Errorf("ParseWith(%q) failed with %v, want %q", tc.expr, err, tc.err)
+		}
+		if !slices.Equal(res.asked, tc.asked) {
+			t.Errorf("ParseWith(%q) asked %q, want %q", tc.expr, res.asked, tc.asked)
+		}
+	}
+}
+
+// cutShort is a batchResolver whose ResolveBatch answers only the first n
+// groups, as one that was interrupted, and nil for n of 0.
+type cutShort struct {
+	*batchResolver
+	n int
+}
+
+func (c cutShort) ResolveBatch(refs []nodeset.GroupRef) []nodeset.GroupAnswer {
+	answers := c.batchResolver.ResolveBatch(refs)
+	if c.n == 0 {
+		return nil
+	}
+	return answers[:c.n]
+}
+
+// A group ResolveBatch has no answer for is left to Resolve.
+func TestBatchResolverLeavesGroupsWithoutAnAnswerToResolve(t *testing.T) {
+	t.Parallel()
+	for n, asked := range map[int][]string{
+		0: {"batch :a :c rack:d", "resolve :a", "resolve :c", "resolve rack:d"},
+		1: {"batch :a :c rack:d", "resolve :c", "resolve rack:d"},
+	} {
+		res := cutShort{newBatchResolver(), n}
+		ns, err := nodeset.ParseWith("@a,@c,@rack:d,@c", res)
+		if err != nil {
+			t.Fatalf("ParseWith with %d answers failed: %v", n, err)
+		}
+		if got, want := ns.String(), "n[1-4]"; got != want {
+			t.Errorf("ParseWith with %d answers = %s, want %s", n, got, want)
+		}
+		if !slices.Equal(res.asked, asked) {
+			t.Errorf("ParseWith with %d answers asked %q, want %q", n, res.asked, asked)
+		}
+	}
+}
+
+// reorders is a batchResolver whose ResolveBatch reverses the slice it is
+// given once it has answered, as one that sorts it in place might.
+type reorders struct{ *batchResolver }
+
+func (r reorders) ResolveBatch(refs []nodeset.GroupRef) []nodeset.GroupAnswer {
+	answers := r.batchResolver.ResolveBatch(refs)
+	slices.Reverse(refs)
+	return answers
+}
+
+// The answers belong to the groups in the order they were asked for, even
+// when the resolver reorders the slice it was given.
+func TestBatchResolverMayReorderItsRefs(t *testing.T) {
+	t.Parallel()
+	ns, err := nodeset.ParseWith("@c,@e!@a", reorders{newBatchResolver()})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got, want := ns.String(), "n[3-5]"; got != want {
+		t.Errorf("ParseWith = %s, want %s", got, want)
+	}
+}
+
+// Answers are kept for one call of ParseWith: keeping them from one call to
+// the next is the resolver's to do.
+func TestBatchResolverAnswersAreKeptForOneParse(t *testing.T) {
+	t.Parallel()
+	res := newBatchResolver()
+	for range 2 {
+		if _, err := nodeset.ParseWith("@a,@c", res); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if want := []string{"batch :a :c", "batch :a :c"}; !slices.Equal(res.asked, want) {
+		t.Errorf("two calls of ParseWith asked %q, want %q", res.asked, want)
+	}
+}
+
+// onlyResolver hides that a resolver can look up several groups at once.
+type onlyResolver struct{ nodeset.Resolver }
+
+// batchSeeds refer to groups in each way the parser reads a reference, and
+// fail in each way an expression with groups can.
+var batchSeeds = []string{
+	"@a", "@a,@b", "@b!@a", "@e&@rack:r1", "@rack:*", "@*", "@site:*,@rack:*", "@a,@lost", "@lost,@a",
+	"@gone,@nope", "@nope,@gone", "@a@b", "x@a,@b", "@", "@site:", "@,@site:", "n[1-3],@a ^ @rack:d",
+	"@a,[", "@b]", "@a,@c,]@e", "@a,@b&", "@a&,@b", "&@a,@b", "@a,@a,@a", "x[1-2]&@rack:r1,@c",
+	"@a,@b:c,@:a", "@:a,@s:g:h", "@rack:r2,@rack:r3", "@b,@rack:r3", "@a\u00a0,@b", "\u2003@a\v,@c",
+	"@a\t@b\n@c\r@e^@lost", "@a[1,2],@b", "@a[1,2,@b", "@loop", "@a,@loop", "exe[1-],@a,@b", "exe[1-2]x,@gone",
+}
+
+func TestBatchResolverAgreesWithResolve(t *testing.T) {
+	t.Parallel()
+	for _, expr := range batchSeeds {
+		batchAgrees(t, expr)
+	}
+}
+
+// batchAgrees checks that an expression names the same hosts, or fails with
+// the same error, whether its groups are looked up at once or one after the
+// other.
+func batchAgrees(t *testing.T, expr string) {
+	t.Helper()
+	got, err := nodeset.ParseWith(expr, newBatchResolver())
+	want, wantErr := nodeset.ParseWith(expr, onlyResolver{newBatchResolver()})
+	switch {
+	case fmt.Sprint(err) != fmt.Sprint(wantErr):
+		t.Errorf("ParseWith(%q) failed with %v through ResolveBatch, with %v through Resolve", expr, err, wantErr)
+	case err == nil && !slices.Equal(got.Expand(), want.Expand()):
+		t.Errorf("ParseWith(%q) = %s through ResolveBatch, %s through Resolve", expr, got, want)
 	}
 }
 

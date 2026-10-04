@@ -12,11 +12,12 @@ the language they hold the package to.
 ## What is tested where
 
 **Unit tests** cover parsing, folding and expansion, the set operators and
-their order, groups through a table resolver, host lists, splitting, the
+their order, groups through a table resolver and through one that looks up
+the groups of an expression at once, host lists, splitting, the
 limits, and the spelling a set keeps for a host written with other padding.
 The case name says which property is checked.
 
-**A fuzz target**, `FuzzParseFold`, checks the two properties a node set
+**Two fuzz targets.** `FuzzParseFold` checks the two properties a node set
 expression must satisfy: parsing never panics, and folding is idempotent. It
 compares the hosts before and after folding name by name, so a fold that
 renamed `exe3` to `exe03` would be caught, which a padding-blind membership
@@ -24,11 +25,15 @@ check would not. It also checks that `Hostlist` names the same hosts. It is
 how the adjacent-numeric-parts ambiguity was found. A fuzzing worker gives up
 on any input that runs for ten seconds, so the target lowers the expansion
 limits to 2¹² and skips inputs longer than a kilobyte: every input stays
-cheap, and the time goes into variety. CI runs it for a bounded time on every
-change; locally, run it from the package's directory:
+cheap, and the time goes into variety. `FuzzParseBatch` parses each
+expression over a table of groups twice, through a `BatchResolver` and
+through `Resolve` alone, and requires the same hosts or the same error; its
+seeds refer to groups in each way the parser reads a reference. CI runs both
+for a bounded time on every change; locally, run one from the package's
+directory:
 
 ```console
-$ go test -run '^$' -fuzz FuzzParseFold -fuzztime 60s .
+$ go test -run '^$' -fuzz '^FuzzParseFold$' -fuzztime 60s .
 ```
 
 **A differential corpus** holds node set expressions with the answer

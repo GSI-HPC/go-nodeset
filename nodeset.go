@@ -47,8 +47,13 @@ func Parse(expr string, opts ...Option) (*NodeSet, error) {
 }
 
 // ParseWith evaluates a node set expression, resolving group references
-// through res. A nil resolver rejects every group reference.
+// through res. A nil resolver rejects every group reference. A resolver that
+// implements BatchResolver is asked for the groups of each expression at
+// once, before the expression is evaluated.
 func ParseWith(expr string, res Resolver, opts ...Option) (*NodeSet, error) {
+	if br, ok := res.(BatchResolver); ok {
+		res = &batch{BatchResolver: br, answers: make(map[GroupRef]GroupAnswer)}
+	}
 	ns, err := parseExpression(expr, res, 0, newBudget())
 	if err != nil {
 		return nil, err

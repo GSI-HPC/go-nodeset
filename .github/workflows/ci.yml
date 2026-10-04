@@ -62,7 +62,8 @@ jobs:
       - uses: ./.github/actions/setup-go
 
       # Parsing never panics, and folding is idempotent: the printed form of
-      # a set parses back into the same set. A short run on every change
+      # a set parses back into the same set. A BatchResolver gives the hosts
+      # and errors that Resolve alone gives. A short run on every change
       # catches a regression; a failing input is committed under
       # testdata/fuzz/, where every later run replays it.
       - name: Fuzz

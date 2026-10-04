@@ -43,10 +43,13 @@ $(CLUSTERSHELL)/installed: testdata/requirements.txt
 	$(CLUSTERSHELL)/bin/pip install --quiet --requirement testdata/requirements.txt
 	touch $@
 
-## fuzz: fuzz the parser for FUZZTIME (90s); a failing input lands in testdata/fuzz/
+## fuzz: run each fuzz target for FUZZTIME (90s); a failing input lands in testdata/fuzz/
+FUZZ ?= FuzzParseFold FuzzParseBatch
 .PHONY: fuzz
 fuzz:
-	$(GO) test -run '^$$' -fuzz FuzzParseFold -fuzztime $(FUZZTIME) .
+	for target in $(FUZZ); do \
+		$(GO) test -run '^$$' -fuzz "^$$target$$" -fuzztime $(FUZZTIME) . || exit 1; \
+	done
 
 ## lint: golangci-lint (.golangci.yml), gofmt and goimports included
 .PHONY: lint

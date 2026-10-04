@@ -21,6 +21,7 @@ edited: a later one supersedes it, and the earlier one's status names it.
 | [10](#10-the-first-release-is-v100) | The first release is v1.0.0 | accepted |
 | [11](#11-mapresolver-evaluates-every-group-of-a-source-on-its-own) | MapResolver evaluates every group of a source on its own | accepted, in part superseded by [12](#12-a-group-with-unbalanced-brackets-is-evaluated-on-its-own-too) |
 | [12](#12-a-group-with-unbalanced-brackets-is-evaluated-on-its-own-too) | A group with unbalanced brackets is evaluated on its own too | accepted |
+| [13](#13-a-resolver-may-look-up-the-groups-of-an-expression-at-once) | A resolver may look up the groups of an expression at once | accepted |
 
 ## 1. Apache-2.0, and GSI holds the copyright
 
@@ -580,3 +581,77 @@ so does ClusterShell 1.10.1's fallback for a source without an `all` group.
 - `@*` and `@source:*` over a source whose groups close each other's
   brackets named hosts in v1.0.0 and are an error now, and `All` returns
   another expression for that source.
+
+## 13. A resolver may look up the groups of an expression at once
+
+Status: accepted
+
+### Context
+
+The parser evaluates an expression term by term, and resolves a group
+reference, the groups it refers to included, before it reads the next
+term, so a `Resolver` is asked for one group at a time. Outside a test, a
+group source is seldom a table in memory: ClusterShell's `groups.conf`
+runs a command for each lookup, and sites back their sources with Slurm,
+LDAP, an inventory or DNS. Each lookup is a round trip, and an expression
+that refers to eight groups waited for eight of them, one after the other.
+Many of those backends can answer several groups in one request, such as
+an LDAP query with an OR filter, an SQL `IN` or `sinfo -p a,b,c`, or look
+them up in parallel.
+
+clusterctl looked the groups up together in front of the package, through
+a resolver that read the references of each expression before handing it
+on. To find them it kept a copy of how the parser splits an expression
+into terms, and of how a bare reference inside a group of a named source
+takes that source, held to the parser by a fuzz target in its own
+repository. Every change to those rules had to be made there again.
+
+Two ways of grouping the lookups were weighed: the groups of each
+expression, before it is evaluated, or the groups of each level of
+nesting, with the answers of every group of a level read before any is
+evaluated. The second makes fewer round trips when several groups of a
+level refer to further groups: two rather than three for `@compute,@gpu`
+when each is a list of racks. It needs a walk of the groups ahead of the
+evaluation, which repeats the evaluation's depth limit and its rule for
+sources, and it looks up more groups when the evaluation fails.
+
+### Decision
+
+- A new optional interface, `BatchResolver`, adds
+  `ResolveBatch([]GroupRef) []GroupAnswer` to `Resolver`, and is found by
+  type assertion, as `Lister` is (decision 10). `Resolver` gains no method,
+  and every other resolver is asked as before.
+- Before an expression is evaluated, the one `ParseWith` is given or one a
+  group answers with, the groups it refers to that have not been looked up
+  yet are asked for in one `ResolveBatch`, when there are at least two. The
+  evaluation takes each answer from there, and asks `Resolve` for a group
+  that got none. `@*` and `@source:*` stay `All`'s.
+- The references are read by the function the evaluation reads its terms
+  with, so the two cannot read an expression differently. A bare reference
+  has the source `Resolve` would be given for it.
+- Answers, failures included, are kept for one call of `ParseWith`, in
+  which a group that has been answered is not asked for again. Keeping
+  answers from one call to the next is the resolver's to do.
+- An expression names the same hosts, and fails with the same error, as
+  through `Resolve` alone: an answer's error is reported where the
+  evaluation reaches the group. `FuzzParseBatch` holds the two to each
+  other.
+- The package starts no goroutines: how the groups are looked up is the
+  resolver's to decide.
+- Which groups are asked for together is not part of the API, as speed is
+  not (decision 10), so a later release may group them by level.
+
+### Costs
+
+- An expression that fails may have had groups looked up that its
+  evaluation never reached, those after the term that failed. A lookup only
+  reads, but it costs a round trip, and a resolver that logs its lookups
+  records them.
+- The parser reads an expression twice when the resolver batches: once for
+  its references and once to evaluate it.
+- Three more exported names, `BatchResolver`, `GroupRef` and
+  `GroupAnswer`, stay until v2.
+- A level of nesting with several groups that refer to further groups
+  still costs a round trip for each of them.
+- A program that parses several expressions which refer to the same groups,
+  and wants those looked up together, keeps the answers in its resolver.

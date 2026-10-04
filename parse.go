@@ -51,6 +51,9 @@ func parseExpression(expr string, res Resolver, depth int, b *budget) (*NodeSet,
 	if depth > maxGroupDepth {
 		return nil, fmt.Errorf("group references nested more than %d levels deep", maxGroupDepth)
 	}
+	if bt, source := batchOf(res); bt != nil {
+		bt.lookUp(expr, source)
+	}
 	result := New()
 	var plain plainName
 	err := splitTerms(expr, func(op operator, term string) error {
@@ -90,7 +93,9 @@ func parseExpression(expr string, res Resolver, depth int, b *budget) (*NodeSet,
 
 // splitTerms reads an expression term by term, left to right, and hands
 // each term, trimmed and not empty, to each with the operator that joins it
-// to the terms before it.
+// to the terms before it. The evaluation and the lookup of a BatchResolver's
+// groups both read an expression through it, so that they read the same
+// terms.
 //
 // Whitespace and the operators outside brackets end a term. A comma or
 // whitespace between two operands is a union, and an empty operand of a
